@@ -1,7 +1,7 @@
 {% import 'macros/accordion.jinja2' as accordion %}
 
-{# {% block content_help %} #}
-   {# <div class="offcanvas offcanvas-end offcanvas-bg overflow-auto" tabindex="-1" id="sidebar" aria-labelledby="sidebar-label" data-overlay="false">
+{% block content_help %}
+   <div class="offcanvas offcanvas-end offcanvas-bg overflow-auto" tabindex="-1" id="sidebar" aria-labelledby="sidebar-label" data-overlay="false">
         {{ accordion.header(titulo) }}
         <p class="p-descript">{{ descripcion }} </p>
         <div class="offcanvas-body p-descript">
@@ -19,6 +19,6 @@
                 </div>
             </div>
         </div>
-    </div> #}
-    {# <a href="#sidebar" class="d-block mt-3 btn-flotante" style="z-index:100" data-bs-toggle="offcanvas" role="button" aria-controls="sidebar"><i class="iconify" data-icon="mdi:help"></i></a> #}
-{# {% endblock %} #}
+    </div>
+    <a href="#sidebar" class="d-block mt-3 btn-flotante" style="z-index:100" data-bs-toggle="offcanvas" role="button" aria-controls="sidebar"><i class="iconify" data-icon="mdi:help"></i></a> #}
+{% endblock %}

@@ -695,7 +695,7 @@ def search():
 
 def help_tickets(seccion: str):
     """Cargar archivo de ayuda"""
-    archivo_ayuda = open("plataforma_web/static/json/help/tickets_help.json", "r")
+    archivo_ayuda = open("plataforma_web/static/json/help/tickets.json", "r")
     data = json.load(archivo_ayuda)
     archivo_ayuda.close()
     return render_template("help.jinja2", titulo=data["titulo"], descripcion=data["descripcion"], secciones=data["secciones"], seccion_id=seccion)
