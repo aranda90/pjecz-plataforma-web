@@ -27,7 +27,6 @@
         {% if current_user.can_insert('SOPORTES TICKETS') %}
             {{ topbar.button_new('Nuevo Ticket', url_for('soportes_tickets.new')) }}
         {% endif %}
-        {# {{ topbar.button(url_for('soporte_tickets.ayuda'),'mdi:help_questionmarket')}} #}
     {% endcall %}
 {% endblock %}
 
@@ -49,27 +48,17 @@
         </a>
         <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasExample" aria-labelledby="offcanvasExampleLabel">
             <div id="help_accordion">
-                
-                <div class="accordion" id="accordionExample">
-                    <div class="accordion-item">
-                        <h2 class="accordion-header" id="headingOne">
-                        <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne" aria-expanded="true" aria-controls="collapseOne">
-                            Accordion Item #1
-                        </button>
-                        </h2>
-                        <div id="collapseOne" class="accordion-collapse collapse show" aria-labelledby="headingOne" data-bs-parent="#accordionExample">
-                        <div class="accordion-body">
-                            <strong>This is the first item's accordion body.</strong> It is shown by default, until the collapse plugin adds the appropriate classes that we use to style each element. These classes control the overall appearance, as well as the showing and hiding via CSS transitions. You can modify any of this with custom CSS or overriding our default variables. It's also worth noting that just about any HTML can go within the <code>.accordion-body</code>, though the transition does limit overflow.
-                        </div>
-                        </div>
+                <div class="offcanvas-body p-descript">
+                    <div style="background-color:#ebebeb" >
+                        <div class="overflow-auto " data-spy="scroll" data-target="#navbar-example2" data-offset="0">
+                            <div id="accordion_item"></div>
+                        </div> 
                     </div>
                 </div>
             </div>
         </div> 
     {% endcall %}
 {% endblock %}
-
-
 
 {% block custom_javascript %}
     <script>
@@ -80,18 +69,31 @@
                 cache: false,
                 success: function(data){
                     console.log(data);
-                    $("#help_accordion").prepend(`
-                        <h5 id="sidebar-label">aqui un tiyuil</h5>
-                            <button class="btn-close" type="button" data-bs-dismiss="offcanvas" aria-label="Close"></button>
-                        </div>
+                    let show = "show";
+                    $("#help_accordion").prepend(`                            
                         <div class="offcanvas-header offcanvas-bg ">
                             <h5 id="sidebar-label">`+ data.titulo +`</h5>
                             <button class="btn-close" type="button" data-bs-dismiss="offcanvas" aria-label="Close"></button>
                         </div>
+                        <p class="p-descript">`+ data.descripcion +`</p>
                     `)
-                    data.secciones.map(function(seccion){
-                        
-                    })
+                    data.secciones.map(function(seccion){ 
+                        $('#accordion_item').append(`
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="headingOne">
+                                    <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne" aria-expanded="true" aria-controls="collapseOne">
+                                        `+ seccion.subtitulo +`
+                                    </button>
+                                </h2>
+                                <div id="collapseOne" class="accordion-collapse collapsed `+ show +`" aria-labelledby="headingOne" data-bs-parent="#accordionExample">
+                                <div class="accordion-body">
+                                    `+ seccion.descripcion +`
+                                </div>
+                                </div>
+                            </div>
+                        `);
+                    });
+                    show = "";                     
                 },
                 error: function(data){
                     console.log(data);
