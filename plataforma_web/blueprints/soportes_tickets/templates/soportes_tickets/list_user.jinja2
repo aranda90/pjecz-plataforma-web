@@ -48,70 +48,23 @@
             <i class="iconify" data-icon="mdi:help"></i>
         </a>
         <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasExample" aria-labelledby="offcanvasExampleLabel">
-            <div id="json">
-                {# <div class="offcanvas offcanvas-end offcanvas-bg overflow-auto" tabindex="-1" id="sidebar" aria-labelledby="sidebar-label" data-overlay="false">#}
-                    {{ accordion.header(titulo) }}
-                    {# <p class="p-descript">{{ descripcion }} </p>
-                    <div class="offcanvas-body p-descript">
-                        <div style="background-color:#ebebeb" >
-                            <div class="overflow-auto " data-spy="scroll" data-target="#navbar-example2" data-offset="0">
-                                <div class="accordion " id="accordionP">
-                                {% for seccion in secciones %}
-                                    {% set show = "" %}
-                                    {% if seccion["id"] == seccion_id %}
-                                        {% set show = "show" %}
-                                    {% endif %}
-                                    {{  accordion.help_items(seccion["id"], seccion["subtitulo"], ("<p>" + seccion["descripcion"]|join('</p>\n<p>')  + "</p>"), show) }}
-                                {% endfor %}
-                                </div>
-                            </div>
+            <div id="help_accordion">
+                
+                <div class="accordion" id="accordionExample">
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="headingOne">
+                        <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne" aria-expanded="true" aria-controls="collapseOne">
+                            Accordion Item #1
+                        </button>
+                        </h2>
+                        <div id="collapseOne" class="accordion-collapse collapse show" aria-labelledby="headingOne" data-bs-parent="#accordionExample">
+                        <div class="accordion-body">
+                            <strong>This is the first item's accordion body.</strong> It is shown by default, until the collapse plugin adds the appropriate classes that we use to style each element. These classes control the overall appearance, as well as the showing and hiding via CSS transitions. You can modify any of this with custom CSS or overriding our default variables. It's also worth noting that just about any HTML can go within the <code>.accordion-body</code>, though the transition does limit overflow.
+                        </div>
                         </div>
                     </div>
-                </div> #}
-           {# </div>
-             <div class="offcanvas-header">
-                <h5 class="offcanvas-title" id="offcanvasExampleLabel">Ayuda</h5>
-                <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+                </div>
             </div>
-            <div class="offcanvas-body">
-                <div>
-                Aquí colocaremos el json para mostrar la ayuda correspondiente
-                </div>
-                <div class="dropdown mt-3">
-                    <div class="accordion accordion-flush" id="accordionFlushExample">
-                        <div class="accordion-item">
-                            <h2 class="accordion-header" id="flush-headingOne">
-                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#flush-collapseOne" aria-expanded="false" aria-controls="flush-collapseOne">
-                                    Ayuda 1
-                                </button>
-                            </h2>
-                            <div id="flush-collapseOne" class="accordion-collapse collapse" aria-labelledby="flush-headingOne" data-bs-parent="#accordionFlushExample">
-                                <div class="accordion-body">Placeholder content for this accordion, which is intended to demonstrate the <code>.accordion-flush</code> class. This is the first item's accordion body.</div>
-                            </div>
-                        </div>
-                        <div class="accordion-item">
-                            <h2 class="accordion-header" id="flush-headingTwo">
-                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#flush-collapseTwo" aria-expanded="false" aria-controls="flush-collapseTwo">
-                                    Ayuda 2
-                                </button>
-                            </h2>
-                            <div id="flush-collapseTwo" class="accordion-collapse collapse" aria-labelledby="flush-headingTwo" data-bs-parent="#accordionFlushExample">
-                                <div class="accordion-body">Placeholder content for this accordion, which is intended to demonstrate the <code>.accordion-flush</code> class. This is the second item's accordion body. Let's imagine this being filled with some actual content.</div>
-                            </div>
-                        </div>
-                        <div class="accordion-item">
-                            <h2 class="accordion-header" id="flush-headingThree">
-                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#flush-collapseThree" aria-expanded="false" aria-controls="flush-collapseThree">
-                                    Ayuda 3
-                                </button>
-                            </h2>
-                            <div id="flush-collapseThree" class="accordion-collapse collapse" aria-labelledby="flush-headingThree" data-bs-parent="#accordionFlushExample">
-                                <div class="accordion-body">Placeholder content for this accordion, which is intended to demonstrate the <code>.accordion-flush</code> class. This is the third item's accordion body. Nothing more exciting happening here in terms of content, but just filling up the space to make it look, at least at first glance, a bit more representative of how this would look in a real-world application.</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>#}
         </div> 
     {% endcall %}
 {% endblock %}
@@ -123,10 +76,22 @@
         $(document).ready(function(){
             $.ajax({
                 url:"static/json/help/tickets.json",
-                type: "POST",
+                type: "GET",
                 cache: false,
                 success: function(data){
                     console.log(data);
+                    $("#help_accordion").prepend(`
+                        <h5 id="sidebar-label">aqui un tiyuil</h5>
+                            <button class="btn-close" type="button" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+                        </div>
+                        <div class="offcanvas-header offcanvas-bg ">
+                            <h5 id="sidebar-label">`+ data.titulo +`</h5>
+                            <button class="btn-close" type="button" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+                        </div>
+                    `)
+                    data.secciones.map(function(seccion){
+                        
+                    })
                 },
                 error: function(data){
                     console.log(data);
