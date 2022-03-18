@@ -43,3 +43,20 @@
         </div>
     </div>
 {%- endmacro -%}
+
+
+{%- macro btn_help(id, href, icon, class="") -%}
+    <a class="btn btn-primary {{ class }}" id="{{ id }}" data-bs-toggle="offcanvas" href="#{{href}}" role="button" aria-controls="{{id}}">
+        <i class="iconify" data-icon="{{icon}}"></i>
+    </a>
+{%- endmacro -%}
+
+{%- macro container_help(id,class="") -%}
+    <div class="offcanvas offcanvas-end offcanvas-bg overflow-auto" tabindex="-1" id="{{ id }}" aria-labelledby="sidebar-label" data-overlay="false" aria-modal="true" role="dialog">
+        <div class="offcanvas-body {{class}}">
+            <div id="accordion_container" style="background-color:#ebebeb">
+                <div  class="overflow-auto " data-spy="scroll" data-target="#navbar-example2" data-offset="0"></div>
+            </div>
+        </div>
+    </div>
+{%- endmacro -%}
