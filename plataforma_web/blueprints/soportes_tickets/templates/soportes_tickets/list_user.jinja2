@@ -50,12 +50,25 @@
 
 {% block custom_javascript %}
     <script>
+        
        $("#boton_ayuda").click(function(){
-           const url = "https://storage.googleapis.com/pjecz-informatica/static/json/tickets_help.json";
+           const urlLocal = "http://localhost:8006/tickets.json";
+           //const archivo = "/static/json/help/tickets_help.json";
+           //const url = "https://storage.googleapis.com/pjecz-informatica/static/json/tickets_help.json";
+           let headers = new Headers();
+
+            headers.append('Content-Type', 'application/json');
+            headers.append('Accept', 'application/json');
+
+            headers.append('Access-Control-Allow-Origin', 'http://localhost:8006/tickets.json');
+            headers.append('Access-Control-Allow-Credentials', 'true');
+
+            headers.append('GET', 'POST', 'OPTIONS');
+
             $.ajax({
-                url:url,
+                url:urlLocal,
+                headers: headers,
                 type: "GET",
-                cache: false,
                 success: function(data){
                     console.log(data);
                     $("#offcanvasExample").prepend(`
