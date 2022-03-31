@@ -52,26 +52,12 @@
     <script>
         
        $("#boton_ayuda").click(function(){
-           const urlLocal = "http://localhost:8006/tickets.json";
-           //const archivo = "/static/json/help/tickets_help.json";
-           //const url = "https://storage.googleapis.com/pjecz-informatica/static/json/tickets_help.json";
-           let headers = new Headers();
-
-            headers.append('Content-Type', 'application/json');
-            headers.append('Accept', 'application/json');
-
-            headers.append('Access-Control-Allow-Origin', 'http://localhost:8006/tickets.json');
-            headers.append('Access-Control-Allow-Credentials', 'true');
-
-            headers.append('GET', 'POST', 'OPTIONS');
-
-            $.ajax({
-                url:urlLocal,
-                headers: headers,
-                type: "GET",
-                success: function(data){
-                    console.log(data);
-                    $("#offcanvasExample").prepend(`
+           //const urlLocal = "http://localhost:8006/tickets.json";
+            const archivo = "/static/json/help/tickets_help.json";
+            const url = "https://storage.googleapis.com/pjecz-informatica/static/json/tickets_help.json";
+            
+            /*$.getJSON('https://storage.googleapis.com/pjecz-informatica/static/json/tickets_help.json', (data) => {
+                $("#offcanvasExample").prepend(`
                     <div class="offcanvas-header offcanvas-bg">
                         <h5 class="offcanvas-title" id="siderbar-label">`+ data.titulo +`</h5>
                         <button class="btn-close" type="button" data-bs-dismiss="offcanvas" aria-label="Close"></button>
@@ -101,9 +87,51 @@
                         collapsed = "collapsed";
                     });
                     $("accordion_container").html('</div>');
+            });*/
+            
+            $.ajax({
+                url:archivo,
+                 /*headers: {
+                    'Authorization':'token', */
+                    type: "GET",
+                    accepts: "application/json",
+                    crossDomain: true,
+                    dataType: 'jsonp',
+                    success: function(data){
+                        console.log(data);
+                        $("#offcanvasExample").prepend(`
+                        <div class="offcanvas-header offcanvas-bg">
+                            <h5 class="offcanvas-title" id="siderbar-label">`+ data.titulo +`</h5>
+                            <button class="btn-close" type="button" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+                            
+                        </div><p class="p-descript">`+ data.descripcion +`</p>`);
+                        let status = "show";
+                        let expanded = "true";
+                        let collapsed = "";
+                        $("#accordion_container").html('<div class="accordion" id="accordionHelp">');
+                        data.secciones.map(function(seccion){
+                            $("#accordionHelp").append(`
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header accordion-color" id="heading_`+ seccion.id +`">
+                                        <button class="accordion-button fw-bolder `+ collapsed +`" type="button" data-bs-toggle="collapse" data-bs-target="#collapse_`+ seccion.id +`" aria-controls="collapse_`+ seccion.id +`" aria-expanded="`+ expanded +`">
+                                            `+ seccion.subtitulo +`
+                                        </button>
+                                    </h2>
+                                    <div id="collapse_`+ seccion.id +`" class="accordion-collapse collapse `+ status +`" aria-labelledby="heading_`+ seccion.id +`" data-bs-parent="#accordionHelp">
+                                        <div class="accordion-body help-body">
+                                            `+ seccion.descripcion +`
+                                        </div>
+                                    </div>
+                                </div> 
+                            `);
+                            status = "";
+                            expanded = "false";
+                            collapsed = "collapsed";
+                        });
+                        $("accordion_container").html('</div>');
 
-                },
-                dataType: 'json',
+                    },
+                //},
                 error: function(data){
                     console.log(data);
                 }
