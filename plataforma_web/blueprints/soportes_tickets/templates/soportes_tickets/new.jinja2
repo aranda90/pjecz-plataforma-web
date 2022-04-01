@@ -52,10 +52,12 @@
 {% block custom_javascript %}
     <script>
        $("#boton_ayuda").click(function(){
+            const archivo = "/static/json/help/tickets_help.json";
             $.ajax({
-                url:"static/json/help/tickets.json",
+                url:archivo,
                 type: "GET",
-                cache: false,
+                crossDomain: true,
+                dataType: 'json',
                 success: function(data){
                     console.log(data);
                     $("#offcanvasNew").prepend(`
