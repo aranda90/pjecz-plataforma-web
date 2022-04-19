@@ -10,7 +10,7 @@
     <link href="{{ url_for('static', filename='css/quill.css') }}" rel="stylesheet" type="text/css"/>
     <meta http-equiv="Content-Type" content="text/html">
     {# <meta http-equiv="Content-Type" content="application/json"> #}
-    {# <meta http-equiv="Access-Control-Allow-Origin" content="application/json" /> #}
+    <meta http-equiv="X-Content-Type-Options" content="*" />
     <style>
         tr {
             border-color: white;
@@ -53,27 +53,28 @@
 
 {% block custom_javascript %}
     <script>
-        /*function get_url_json(){
-            var json_url;
+        function get_url_json(){
+            // json_url;
             switch(location.hostname){
-                case "localhost": json_url = "/static/json/help/tickets_help.json"; break;
-                //case "172.30.37.233": json_url = "Access-Control-Allow-Origin: http://localhost:8006/tickets_help.json"; break;
-                case "127.0.0.1": json_url = "/static/json/help/tickets_help.json"; break;
-                default: json_url = "https://storage.googleapis.com/pjecz-informatica/static/json/tickets_help.json/"; break;
+                case "localhost": return "http://localhost:8006/Documentos/json%20plataforma/tickets_help.json"; break;
+                case "172.30.37.233": return "http://localhost:8006/Documentos/json%20plataforma/tickets_help.json"; break;
+                case "127.0.0.1": return "http://localhost:8006/Documentos/json%20plataforma/tickets_help.json"; break;
+               default: return "Access-Control-Allow-Origin: https://storage.googleapis.com/pjecz-informatica/static/json/tickets_help.json/"; break;
             }
-            return json_url;
-        }*/
+            //return json_url;
+        }
        $("#boton_ayuda").click(function(){
-           const urlLocal = "Access-Control-Allow-Origin: http://localhost:8006/tickets_help.json/";
-            const archivo = "/static/json/help/tickets_help.json";
+            //const urlLocal = "Access-Control-Allow-Origin: http://localhost:8006/tickets_help.json/";
+            //const archivo = "/static/json/help/tickets_help.json";
             //const url = "https://storage.googleapis.com/pjecz-informatica/static/json/tickets_help.json/";
             
-            //let url = get_url_json();
+            let url = get_url_json();
+            console.log(url);
             $.ajax({
-                url:urlLocal,
+                url:url,
                 type: "GET",
                 crossDomain: true,
-                dataType: 'json',
+                dataType: 'jsonp',
                 success: function(data){
                     console.log(data);
                     $("#offcanvasExample").prepend(`
