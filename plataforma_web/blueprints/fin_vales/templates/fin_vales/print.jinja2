@@ -1,0 +1,31 @@
+{% extends 'layouts/print.jinja2' %}
+{% import 'macros/detail.jinja2' as detail %}
+
+{% block title %}Vale de Gasolina {{ fin_vale.id }}{% endblock %}
+
+{% block content %}
+    <div id="seccionLugarFecha">
+        Saltillo, Coahuila., {{ moment(fin_vale.creado).format('ll') }}
+    </div>
+    <div id="seccionDestinatario">
+        {{ fin_vale.autorizo_nombre }}<br>
+        {{ fin_vale.autorizo_puesto }}<br>
+        PRESENTE.-
+    </div>
+    <div id="seccionContenido">
+        <p>
+            {{ fin_vale.justificacion }}
+        </p>
+    </div>
+    <div id="seccionFirma">
+        <p style="margin-bottom: 2cm;">A T E N T A M E N T E</p>
+        <p>
+            {{ fin_vale.solicito_puesto }}<br>
+            {{ fin_vale.solicito_nombre }}
+        </p>
+    </div>
+{% endblock %}
+
+{% block custom_javascript %}
+    {{ detail.moment_js(moment) }}
+{% endblock %}

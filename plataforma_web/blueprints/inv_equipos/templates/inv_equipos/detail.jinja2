@@ -6,13 +6,14 @@
 {% block title %}Equipo{% endblock %}
 
 {% block topbar_actions %}
-    {% call topbar.page_buttons('Equipo ' + inv_equipo.inv_equipo_id | string) %}
+    {% call topbar.page_buttons('Equipo ' + inv_equipo.id | string) %}
         {% if current_user.can_edit('INV EQUIPOS') %}
             {{ topbar.button_previous('Equipos', url_for('inv_equipos.list_active')) }}
         {% elif current_user.can_view('INV EQUIPOS') %}
             {{ topbar.button_previous('Tickets', url_for('soportes_tickets.list_active')) }}
         {% endif %}
         {% if current_user.can_admin('INV EQUIPOS') %}
+            {{topbar.button('Transferir Equipo', url_for('inv_equipos.transferir', inv_equipo_id=inv_equipo.id),'mdi:swap-horizontal')}}
             {{ topbar.button_edit('Editar', url_for('inv_equipos.edit', inv_equipo_id=inv_equipo.id)) }}
             {% if inv_equipo.estatus == 'A' %}{{ topbar.button_delete('Eliminar', url_for('inv_equipos.delete', inv_equipo_id=inv_equipo.id)) }}{% endif %}
             {% if inv_equipo.estatus == 'B' %}{{ topbar.button_recover('Recuperar', url_for('inv_equipos.recover', inv_equipo_id=inv_equipo.id)) }}{% endif %}
@@ -24,7 +25,6 @@
 
 {% block content %}
     {% call detail.card(estatus=inv_equipo.estatus) %}
-        {{ detail.label_value('ID', inv_equipo.id) }}
         {% if current_user.can_view('USUARIOS') %}
             {{ detail.label_value('Custodia', inv_equipo.inv_custodia.nombre_completo, url_for('inv_custodias.detail', inv_custodia_id=inv_equipo.inv_custodia_id)) }}
         {% else %}
@@ -41,7 +41,9 @@
             {{ detail.label_value('Modelo', inv_equipo.inv_modelo.descripcion) }}
         {% endif %}
         {{ detail.label_value('Tipo de equipo', inv_equipo.tipo) }}
-        {{ detail.label_value('Fecha de fabricación', moment(inv_equipo.fecha_fabricacion, local=True).format("DD MMM YYYY")) }}
+        {% if inv_equipo.fecha_fabricacion %}
+            {{ detail.label_value('Fecha de fabricación', moment(inv_equipo.fecha_fabricacion, local=True).format("DD MMM YYYY")) }}
+        {% endif %}
         {{ detail.label_value('Inventario', inv_equipo.numero_inventario) }}
         {{ detail.label_value('No. serie', inv_equipo.numero_serie) }}
         {{ detail.label_value('Descripción', inv_equipo.descripcion) }}

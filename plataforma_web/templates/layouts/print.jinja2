@@ -1,0 +1,45 @@
+{% extends 'layouts/base.jinja2' %}
+
+{% block template_head %}
+    <link href="{{ url_for('static', filename='css/bs5-print.css') }}" rel="stylesheet" />
+{% endblock %}
+
+{% block main %}
+    <header id="header">
+        <div class="row">
+            <div class="col">
+                <img src="https://storage.googleapis.com/pjecz-informatica/static/images/pjecz-horizontal.png" alt="PJECZ">
+            </div>
+            <div class="col" id="fraseAnual">
+                2022, Año de Benito Juárez,<br>
+                Defensor de la Soberanía de Coahuila de Zaragoza.
+            </div>
+        </div>
+    </header>
+    <article id="body">
+        {% block content %}{% endblock %}
+    </article>
+    <footer id="footer">
+        <hr>
+        <div class="row">
+            <div class="col">
+                <strong>Poder Judicial</strong><br>
+                Dirección de Innovación<br>
+                Dirección de Informática
+            </div>
+            <div class="col">
+                <strong>Oficina</strong><br>
+                Calle: Isidro López Zertuche # 2791,<br>
+                Colonia: Los Maestros<br>
+                Saltillo, Coahuila de Zaragoza, México
+            </div>
+            <div class="col">
+                <strong>Contacto</strong><br>
+                Telefono: 8447774451 Ext. 6990<br>
+                Correo electrónico: informatica@pjecz.gob.mx
+            </div>
+        </div>
+    </footer>
+{% endblock %}
+
+{% block template_javascript %}{% endblock %}

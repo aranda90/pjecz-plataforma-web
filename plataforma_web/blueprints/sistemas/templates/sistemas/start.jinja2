@@ -16,20 +16,44 @@
 {% endblock %}
 
 {% block content %}
+    {# Carrusel #}
+    <div class="mb-2">
+        <div id="carouselExampleIndicators" class="carousel slide" data-bs-ride="carousel">
+            <div class="carousel-indicators">
+                <button type="button" data-bs-target="#carouselExampleIndicators" data-bs-slide-to="0" class="active" aria-current="true" aria-label="Slide 1"></button>
+                <button type="button" data-bs-target="#carouselExampleIndicators" data-bs-slide-to="1" aria-label="Slide 2"></button>
+                <button type="button" data-bs-target="#carouselExampleIndicators" data-bs-slide-to="2" aria-label="Slide 3"></button>
+            </div>
+            <div class="carousel-inner">
+                <div class="carousel-item active" data-bs-interval="24000">
+                    <img src="https://storage.googleapis.com/pjecz-informatica/static/images/carrusel-infografia-seguridad-01.jpg" class="d-block w-100" alt="01">
+                </div>
+                <div class="carousel-item" data-bs-interval="24000">
+                    <img src="https://storage.googleapis.com/pjecz-informatica/static/images/carrusel-infografia-seguridad-02.jpg" class="d-block w-100" alt="02">
+                </div>
+                <div class="carousel-item" data-bs-interval="24000">
+                    <img src="https://storage.googleapis.com/pjecz-informatica/static/images/carrusel-infografia-seguridad-03.jpg" class="d-block w-100" alt="03">
+                </div>
+            </div>
+            <button class="carousel-control-prev" type="button" data-bs-target="#carouselExampleIndicators" data-bs-slide="prev">
+                <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                <span class="visually-hidden">Previous</span>
+            </button>
+            <button class="carousel-control-next" type="button" data-bs-target="#carouselExampleIndicators" data-bs-slide="next">
+                <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                <span class="visually-hidden">Next</span>
+            </button>
+        </div>
+    </div>
     {# Plataforma Web #}
     {% call start.card() %}
         <div class="container">
-            <div class="row" >
-                <div class="col-12 mb-2">
-                    <h1 class="text-center">Plataforma Web</h1>
-                </div>
-            </div>
             <div class="row" >
                 {% if current_user.can_edit("SOPORTES TICKETS")%}
                     {# Si tiene privilegios para crear tickets col-md-12 offset-md-3 #}
                     <div class="col-md-6 col-sm-12 mb-2">
                         <div class="text-center">
-                            <img src="https://storage.googleapis.com/pjecz-informatica/static/images/soportes-tickets.png" class="img-fluid mb-2">
+                            <img src="https://storage.googleapis.com/pjecz-informatica/static/images/inicio-soportes-tickets-2.png" class="img-fluid mb-2">
                             <h4>¿Necesitas soporte técnico?</h4>
                             <p>
                                 <a href="{{ url_for('soportes_tickets.new') }}"class="btn btn-success btn-tickets ml-auto">Crear un nuevo ticket</a>
@@ -41,7 +65,7 @@
                     {# No tiene privilegios para crear tickets #}
                     <div class="col-md-6 col-sm-12 mb-2">
                         <div class="text-center">
-                            <img src="https://storage.googleapis.com/pjecz-informatica/static/images/soportes-tickets-deshabilitado.png" class="img-fluid mb-2">
+                            <img src="https://storage.googleapis.com/pjecz-informatica/static/images/inicio-soportes-tickets-1.png" class="img-fluid mb-2">
                             <h4>Bienvenido al sistema</h4>
                             <p>Ha ingresado con una cuenta que <strong>no es personal.</strong> Para solicitar Soporte Técnico a Informática use su cuenta coahuila.gob.mx ó pjecz.gob.mx.</p>
                         </div>
@@ -51,7 +75,7 @@
                     {# Directorio #}
                     <div class="col-md-6 col-sm-12 mb-2">
                         <div class="text-center">
-                            <img src="https://storage.googleapis.com/pjecz-informatica/static/images/directorio.png" class="img-fluid mb-2">
+                            <img src="https://storage.googleapis.com/pjecz-informatica/static/images/inicio-directorio.png" class="img-fluid mb-2">
                             <h4>¿Buscas un teléfono?</h4>
                             <p>
                                 <a href="{{ url_for('funcionarios.list_active') }}" class="btn btn-primary btn-directorio">Directorio</a>

@@ -8,9 +8,9 @@ from flask_login import UserMixin
 from lib.universal_mixin import UniversalMixin
 from plataforma_web.extensions import db, pwd_context
 
-from plataforma_web.blueprints.modulos.models import Modulo
 from plataforma_web.blueprints.permisos.models import Permiso
 from plataforma_web.blueprints.tareas.models import Tarea
+from plataforma_web.blueprints.usuarios_roles.models import UsuarioRol
 
 
 class Usuario(db.Model, UserMixin, UniversalMixin):
@@ -39,22 +39,28 @@ class Usuario(db.Model, UserMixin, UniversalMixin):
 
     # Columnas
     email = db.Column(db.String(256), nullable=False, unique=True, index=True)
-    contrasena = db.Column(db.String(256), nullable=False)
     nombres = db.Column(db.String(256), nullable=False)
     apellido_paterno = db.Column(db.String(256), nullable=False)
     apellido_materno = db.Column(db.String(256), default="", server_default="")
     curp = db.Column(db.String(18), default="", server_default="")
     puesto = db.Column(db.String(256), default="", server_default="")
-    telefono_celular = db.Column(db.String(256), default="", server_default="")
-    workspace = db.Column(db.Enum(*WORKSPACES, name="tipos_workspaces", native_enum=False), index=True, nullable=False)
     telefono = db.Column(db.String(48), nullable=False, default="", server_default="")
+    telefono_celular = db.Column(db.String(256), default="", server_default="")
     extension = db.Column(db.String(24), nullable=False, default="", server_default="")
     fotografia_url = db.Column(db.String(512), nullable=False, default="", server_default="")
+    efirma_registro_id = db.Column(db.Integer, nullable=True)
+    workspace = db.Column(db.Enum(*WORKSPACES, name="tipos_workspaces", native_enum=False), index=True, nullable=False)
+
+    # Columnas que no deben ser expuestas
+    api_key = db.Column(db.String(128), nullable=False)
+    api_key_expiracion = db.Column(db.DateTime(), nullable=False)
+    contrasena = db.Column(db.String(256), nullable=False)
 
     # Hijos
     bitacoras = db.relationship("Bitacora", back_populates="usuario", lazy="noload")
     cid_procedimientos = db.relationship("CIDProcedimiento", back_populates="usuario", lazy="noload")
     entradas_salidas = db.relationship("EntradaSalida", back_populates="usuario", lazy="noload")
+    fin_vales = db.relationship("FinVale", back_populates="usuario", lazy="noload")
     mensajes = db.relationship("Mensaje", back_populates="destinatario", lazy="noload")
     mensajes_respuestas = db.relationship("MensajeRespuesta", back_populates="autor", lazy="noload")
     inv_custodias = db.relationship("InvCustodia", back_populates="usuario", lazy="noload")
@@ -155,6 +161,11 @@ class Usuario(db.Model, UserMixin, UniversalMixin):
     def get_task_in_progress(self, nombre):
         """Obtener progreso de una tarea"""
         return Tarea.query.filter_by(nombre=nombre, usuario=self, ha_terminado=False).first()
+
+    def get_roles(self):
+        """Obtener roles"""
+        usuarios_roles = UsuarioRol.query.filter_by(usuario_id=self.id).filter_by(estatus="A").all()
+        return [usuario_rol.rol.nombre for usuario_rol in usuarios_roles]
 
     def __repr__(self):
         """Representación"""

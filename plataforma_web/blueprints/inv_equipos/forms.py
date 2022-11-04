@@ -2,9 +2,11 @@
 Inventarios Equipos, formularios
 """
 from flask_wtf import FlaskForm
-from wtforms import DateField, IntegerField, StringField, SubmitField, RadioField
-from wtforms.validators import DataRequired, Length, Optional
+from wtforms import DateField, IntegerField, SelectField, StringField, SubmitField, RadioField
+from wtforms.validators import DataRequired, Length, Optional, Regexp
 from wtforms.ext.sqlalchemy.fields import QuerySelectField
+
+from lib.safe_string import MAC_ADDRESS_REGEXP
 
 from plataforma_web.blueprints.inv_equipos.models import InvEquipo
 from plataforma_web.blueprints.inv_modelos.models import InvModelo
@@ -36,7 +38,7 @@ class InvEquipoForm(FlaskForm):
     descripcion = StringField("Descripción", validators=[DataRequired(), Length(max=512)])
     tipo = RadioField("Tipo de equipo", choices=InvEquipo.TIPOS, default="OTRO", validators=[DataRequired()])
     direccion_ip = StringField("Dirección IP", validators=[Optional()])
-    direccion_mac = StringField("Dirección MAC", validators=[Optional()])
+    direccion_mac = StringField("Dirección MAC", validators=[Optional(), Regexp(MAC_ADDRESS_REGEXP)])
     numero_nodo = IntegerField("Número de nodo", validators=[Optional()])
     numero_switch = IntegerField("Número de switch", validators=[Optional()])
     numero_puerto = IntegerField("Número de puerto", validators=[Optional()])
@@ -49,6 +51,15 @@ class InvEquipoSearchForm(FlaskForm):
     descripcion = StringField("Descripción", validators=[Optional(), Length(max=256)])
     numero_serie = StringField("Número de serie", validators=[Optional()])
     tipo = StringField("Tipo de equipo", validators=[Optional()])
+    direccion_mac = StringField("Dirección mac", validators=[Optional()])
+    direccion_ip = StringField("Dirección ip", validators=[Optional()])
     fecha_desde = DateField("Fecha desde", validators=[Optional()])
     fecha_hasta = DateField("Fecha hasta", validators=[Optional()])
     buscar = SubmitField("Buscar")
+
+
+class InvEquipoChangeCustodia(FlaskForm):
+    """Formulario para cambiar la custodia de los equipos"""
+
+    inv_custodia = SelectField(label="Custodia", coerce=str, validators=[DataRequired()], validate_choice=False)
+    guardar = SubmitField("Transferir")
