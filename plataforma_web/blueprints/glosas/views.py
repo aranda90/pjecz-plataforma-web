@@ -4,6 +4,7 @@ Glosas, vistas
 import datetime
 import json
 from pathlib import Path
+from urllib.parse import quote
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
@@ -12,6 +13,8 @@ from werkzeug.datastructures import CombinedMultiDict
 from werkzeug.utils import secure_filename
 
 from lib.datatables import get_datatable_parameters, output_datatable_json
+from lib.exceptions import MyAnyError
+from lib.google_cloud_storage import get_blob_name_from_url, get_media_type_from_filename, get_file_from_gcs
 from lib.safe_string import safe_expediente, safe_message, safe_string
 from lib.time_to_text import dia_mes_ano, mes_en_palabra
 from plataforma_web.blueprints.usuarios.decorators import permission_required
@@ -27,7 +30,6 @@ from plataforma_web.blueprints.permisos.models import Permiso
 glosas = Blueprint("glosas", __name__, template_folder="templates")
 
 MODULO = "GLOSAS"
-SUBDIRECTORIO = "Glosas"
 ORGANOS_JURISDICCIONALES = ["PLENO O SALA DEL TSJ", "TRIBUNAL DE CONCILIACION Y ARBITRAJE"]
 LIMITE_DIAS = 365
 LIMITE_ADMINISTRADORES_DIAS = 365  # Administradores pueden manipular un anio
@@ -270,7 +272,7 @@ def datatable_json():
                 "expediente": glosa.expediente,
                 "tipo_juicio": glosa.tipo_juicio,
                 "archivo": {
-                    "url": glosa.url,
+                    "descargar_url": glosa.descargar_url,
                 },
             }
         )
@@ -279,7 +281,6 @@ def datatable_json():
 
 
 @glosas.route("/glosas/datatable_json_admin", methods=["GET", "POST"])
-@permission_required(MODULO, Permiso.ADMINISTRAR)
 def datatable_json_admin():
     """DataTable JSON para listado de glosas admin"""
     # Tomar parámetros de Datatables
@@ -325,12 +326,31 @@ def datatable_json_admin():
                 "expediente": glosa.expediente,
                 "tipo_juicio": glosa.tipo_juicio,
                 "archivo": {
-                    "url": glosa.url,
+                    "descargar_url": url_for("glosas.download", url=quote(glosa.url)),
                 },
             }
         )
     # Entregar JSON
     return output_datatable_json(draw, total, data)
+
+
+@glosas.route("/glosas/descargar", methods=["GET"])
+@permission_required(MODULO, Permiso.ADMINISTRAR)
+def download():
+    """Descargar archivo desde Google Cloud Storage"""
+    url = request.args.get("url")
+    try:
+        # Obtener nombre del blob
+        blob_name = get_blob_name_from_url(url)
+        # Obtener tipo de media
+        media_type = get_media_type_from_filename(blob_name)
+        # Obtener archivo
+        archivo = get_file_from_gcs(current_app.config["CLOUD_STORAGE_DEPOSITO_GLOSAS"], blob_name)
+    except MyAnyError as error:
+        flash(str(error), "warning")
+        return redirect(url_for("glosas.list_active"))
+    # Entregar archivo
+    return current_app.response_class(archivo, mimetype=media_type)
 
 
 @glosas.route("/glosas/refrescar/<int:autoridad_id>")
@@ -398,7 +418,6 @@ def new():
     # Si viene el formulario
     form = GlosaNewForm(CombinedMultiDict((request.files, request.form)))
     if form.validate_on_submit():
-
         # Validar fecha
         fecha = form.fecha.data
         if not limite_dt <= datetime.datetime(year=fecha.year, month=fecha.month, day=fecha.day) <= hoy_dt:
@@ -446,10 +465,10 @@ def new():
         expediente_str = expediente.replace("/", "-")
         descripcion_str = descripcion.replace(" ", "-")
         archivo_str = f"{fecha_str}-{expediente_str}-{descripcion_str}-{glosa.encode_id()}.pdf"
-        ruta_str = str(Path(SUBDIRECTORIO, autoridad.directorio_glosas, ano_str, mes_str, archivo_str))
+        ruta_str = str(Path(autoridad.directorio_glosas, ano_str, mes_str, archivo_str))
 
         # Subir el archivo
-        deposito = current_app.config["CLOUD_STORAGE_DEPOSITO"]
+        deposito = current_app.config["CLOUD_STORAGE_DEPOSITO_GLOSAS"]
         storage_client = storage.Client()
         bucket = storage_client.bucket(deposito)
         blob = bucket.blob(ruta_str)
@@ -504,7 +523,6 @@ def new_for_autoridad(autoridad_id):
     # Si viene el formulario
     form = GlosaNewForm(CombinedMultiDict((request.files, request.form)))
     if form.validate_on_submit():
-
         # Validar fecha
         fecha = form.fecha.data
         if not limite_dt <= datetime.datetime(year=fecha.year, month=fecha.month, day=fecha.day) <= hoy_dt:
@@ -552,10 +570,10 @@ def new_for_autoridad(autoridad_id):
         expediente_str = expediente.replace("/", "-")
         descripcion_str = descripcion.replace(" ", "-")
         archivo_str = f"{fecha_str}-{expediente_str}-{descripcion_str}-{glosa.encode_id()}.pdf"
-        ruta_str = str(Path(SUBDIRECTORIO, autoridad.directorio_glosas, ano_str, mes_str, archivo_str))
+        ruta_str = str(Path(autoridad.directorio_glosas, ano_str, mes_str, archivo_str))
 
         # Subir el archivo
-        deposito = current_app.config["CLOUD_STORAGE_DEPOSITO"]
+        deposito = current_app.config["CLOUD_STORAGE_DEPOSITO_GLOSAS"]
         storage_client = storage.Client()
         bucket = storage_client.bucket(deposito)
         blob = bucket.blob(ruta_str)

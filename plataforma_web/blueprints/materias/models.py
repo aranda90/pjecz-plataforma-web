@@ -16,12 +16,13 @@ class Materia(db.Model, UniversalMixin):
 
     # Columnas
     nombre = db.Column(db.String(64), unique=True, nullable=False)
+    en_sentencias = db.Column(db.Boolean, nullable=False, default=False)
 
     # Hijos
     autoridades = db.relationship("Autoridad", back_populates="materia", lazy="noload")
     materias_tipos_juicios = db.relationship("MateriaTipoJuicio", back_populates="materia")
-    materias_tipos_juzgados = db.relationship('MateriaTipoJuzgado', back_populates='materia')
     tesis_jurisprudencias = db.relationship("TesisJurisprudencia", back_populates="materia", lazy="noload")
+    siga_grabaciones = db.relationship("SIGAGrabacion", back_populates="materia", lazy="noload")
 
     def __repr__(self):
         """Representación"""

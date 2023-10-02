@@ -29,9 +29,6 @@
                     <th>Descripción corta</th>
                     <th>Domicilio</th>
                     <th>Distrito</th>
-                    <th>Apertura</th>
-                    <th>Cierre</th>
-                    <th>L. P.</th>
                     <th>Tipo</th>
                 </tr>
             </thead>
@@ -49,10 +46,7 @@
             { data: "descripcion_corta" },
             { data: "domicilio" },
             { data: "distrito" },
-            { data: "apertura" },
-            { data: "cierre" },
-            { data: "limite_personas" },
-            { data: "tipo" },
+            { data: "tipo" }
         ];
         configDataTable['columnDefs'] = [
             {
@@ -76,10 +70,10 @@
                 targets: 2, // domicilio
                 data: null,
                 render: function(data, type, row, meta) {
-                    if (data.completo.length > 32) {
-                        texto = '<span title="' + data.completo + '">' + data.completo.substr(0, 32) + '…' + '</span>';
+                    if (data.edificio.length > 32) {
+                        texto = '<span title="' + data.edificio + '">' + data.edificio.substr(0, 32) + '…' + '</span>';
                     } else {
-                        texto = data.completo;
+                        texto = data.edificio;
                     }
                     if (data.url == '') {
                         return texto;

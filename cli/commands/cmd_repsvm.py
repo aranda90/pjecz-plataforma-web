@@ -1,26 +1,33 @@
 """
 REPSVM
 
-- Alimentar
+- alimentar: Alimentar desde un archivo CSV
+- reiniciar_consecutivos: Reiniciar los consecutivos de los agresores
+- respaldar: Respaldar los agresores a un archivo CSV
+- subir_descargable: Subir archivo CSV a Google Storage para descargar como datos abiertos
 """
 import csv
 from pathlib import Path
+import os
+
 import click
+from dotenv import load_dotenv
+from google.cloud import storage
+
 from lib.safe_string import safe_string, safe_text, safe_url
 
 from plataforma_web.app import create_app
 from plataforma_web.extensions import db
 
 from plataforma_web.blueprints.distritos.models import Distrito
-from plataforma_web.blueprints.materias.models import Materia
-from plataforma_web.blueprints.materias_tipos_juzgados.models import MateriaTipoJuzgado
 from plataforma_web.blueprints.repsvm_agresores.models import REPSVMAgresor
-from plataforma_web.blueprints.repsvm_delitos_especificos.models import REPSVMDelitoEspecifico
-from plataforma_web.blueprints.repsvm_delitos_genericos.models import REPSVMDelitoGenerico
-from plataforma_web.blueprints.repsvm_tipos_sentencias.models import REPSVMTipoSentencia
 
 app = create_app()
 db.app = app
+
+load_dotenv()  # Take environment variables from .env
+
+SUBDIRECTORIO = "REPSVM"
 
 
 @click.group()
@@ -32,6 +39,8 @@ def cli():
 @click.argument("entrada_csv")
 def alimentar(entrada_csv):
     """Alimentar desde un archivo CSV"""
+
+    # Validar que el archivo CSV exista
     ruta = Path(entrada_csv)
     if not ruta.exists():
         click.echo(f"AVISO: {ruta.name} no se encontró.")
@@ -39,92 +48,261 @@ def alimentar(entrada_csv):
     if not ruta.is_file():
         click.echo(f"AVISO: {ruta.name} no es un archivo.")
         return
-    if MateriaTipoJuzgado.query.count() == 0:
-        MateriaTipoJuzgado(
-            materia=Materia.query.filter_by(nombre="NO DEFINIDO").first(),
-            clave="ND",
-            descripcion="NO DEFINIDO",
-        ).save()
-        click.echo("+ Se agrega el tipo de juzgado NO DEFINIDO")
-    if REPSVMTipoSentencia.query.count() == 0:
-        REPSVMTipoSentencia(nombre="NO DEFINIDO").save()
-        click.echo("+ Se agrega el tipo de sentencia NO DEFINIDO")
-    if REPSVMDelitoGenerico.query.count() == 0:
-        REPSVMDelitoGenerico(nombre="NO DEFINIDO").save()
-        click.echo("+ Se agrega el delito generico NO DEFINIDO")
-    if REPSVMDelitoEspecifico.query.count() == 0:
-        REPSVMDelitoEspecifico(
-            repsvm_delito_generico=REPSVMDelitoGenerico.query.filter_by(nombre="NO DEFINIDO").first(),
-            descripcion="NO DEFINIDO",
-        ).save()
-        click.echo("+ Se agrega el delito especifico NO DEFINIDO")
-    click.echo("Alimentando ubicaciones de expedientes...")
+
+    # Consultar el distrito NO DEFINIDO
+    distrito_no_definido = Distrito.query.filter_by(nombre="NO DEFINIDO").first()
+    if distrito_no_definido is None:
+        click.echo("AVISO: No se encontró el distrito NO DEFINIDO.")
+        return
+
+    # Consultar el consecutivo mas alto por distrito
+    consecutivos = {}
+    for distrito in Distrito.query.filter_by(estatus="A").all():
+        repsvm_agresor = REPSVMAgresor.query.filter_by(distrito_id=distrito.id).order_by(REPSVMAgresor.consecutivo.desc()).first()
+        if repsvm_agresor is None:
+            consecutivos[distrito.id] = 0
+        else:
+            consecutivos[distrito.id] = repsvm_agresor.consecutivo
+
+    # Bucle para leer el archivo CSV
+    click.echo("Alimentando agresores...")
     contador = 0
+    distrito = None
     with open(ruta, encoding="utf8") as puntero:
         rows = csv.DictReader(puntero)
         for row in rows:
-            # Distrito
-            distrito_nombre = row["distrito"].strip()
-            distrito = Distrito.query.filter_by(nombre=distrito_nombre).first()
-            if distrito is None:
-                click.echo(f"! SE OMITE porque no existe el distrito {distrito_nombre}")
-                continue
-            # Materia
-            materia_nombre = safe_string(row["materia"])
-            materia = Materia.query.filter_by(nombre=materia_nombre).first()
-            if materia is None:
-                click.echo(f"! SE OMITE porque no existe la materia {materia_nombre}")
-                continue
-            # Tipo de juzgado
-            materia_tipo_juzgado_clave = safe_string(row["tipo_juzgado_clave"])
-            materia_tipo_juzgado_descripcion = safe_string(row["tipo_juzgado_descripcion"])
-            materia_tipo_juzgado = MateriaTipoJuzgado.query.filter_by(clave=materia_tipo_juzgado_clave).first()
-            if materia_tipo_juzgado is None:
-                materia_tipo_juzgado = MateriaTipoJuzgado(
-                    materia=materia,
-                    clave=materia_tipo_juzgado_clave,
-                    descripcion=materia_tipo_juzgado_descripcion,
-                ).save()
-                click.echo(f"+ Se agrega el tipo de juzgado {materia_tipo_juzgado_clave}")
-            # Tipo de sentencia
-            repsvm_tipo_sentencia_nombre = safe_string(row["tipo_sentencia"])
-            repsvm_tipo_sentencia = REPSVMTipoSentencia.query.filter_by(nombre=repsvm_tipo_sentencia_nombre).first()
-            if repsvm_tipo_sentencia is None:
-                repsvm_tipo_sentencia = REPSVMTipoSentencia(nombre=repsvm_tipo_sentencia_nombre).save()
-                click.echo(f"+ Se agrega el tipo de sentencia {repsvm_tipo_sentencia_nombre}")
-            # Delito generico
-            repsvm_delito_generico_nombre = safe_string(row["delito_generico"])
-            repsvm_delito_generico = REPSVMDelitoGenerico.query.filter_by(nombre=repsvm_delito_generico_nombre).first()
-            if repsvm_delito_generico is None:
-                repsvm_delito_generico = REPSVMDelitoGenerico(nombre=repsvm_delito_generico_nombre).save()
-                click.echo(f"+ Se agrega el delito generico {repsvm_delito_generico_nombre}")
-            # Delito especifico
-            repsvm_delito_especifico_descripcion = safe_string(row["delito_especifico"])
-            repsvm_delito_especifico = REPSVMDelitoEspecifico.query.filter(REPSVMDelitoEspecifico.repsvm_delito_generico == repsvm_delito_generico).filter_by(descripcion=repsvm_delito_especifico_descripcion).first()
-            if repsvm_delito_especifico is None:
-                repsvm_delito_especifico = REPSVMDelitoEspecifico(
-                    repsvm_delito_generico=repsvm_delito_generico,
-                    descripcion=repsvm_delito_especifico_descripcion,
-                ).save()
-                click.echo(f"+ Se agrega el delito especifico {repsvm_delito_especifico_descripcion}")
-            # Insertar agresor
+            # Tomar el tipo de juzgado
+            tipo_juzgado = "ND"
+            if "tipo_juzgado" in row:
+                tipo_juzgado = safe_string(row["tipo_juzgado"])
+                if tipo_juzgado not in REPSVMAgresor.TIPOS_JUZGADOS:
+                    click.echo(f"! SE OMITE porque no es valido el tipo de juzgado {tipo_juzgado}")
+                    continue
+
+            # Tomar el tipo de sentencia
+            tipo_sentencia = "ND"
+            if "tipo_sentencia" in row:
+                tipo_sentencia = safe_string(row["tipo_sentencia"])
+                if tipo_sentencia not in REPSVMAgresor.TIPOS_SENTENCIAS:
+                    click.echo(f"! SE OMITE porque no es valido el tipo de sentencia {tipo_sentencia}")
+                    continue
+
+            # Consultar el distrito
+            distrito = distrito_no_definido
+            if "distrito_id" in row:
+                distrito = Distrito.query.get(int(row["distrito_id"]))
+                if distrito is None:
+                    click.echo(f"AVISO: No se encontró el distrito {row['distrito_id']}.")
+                    continue
+
+            # Si tiene es_publico, determinar el consecutivo y si es publico
+            consecutivo = 0
+            es_publico = False
+            if "es_publico" in row:
+                if distrito.id not in consecutivos:
+                    click.echo(f"! SE OMITE porque no existe el ID distrito {distrito.id}")
+                    continue
+                consecutivos[distrito.id] += 1
+                consecutivo = consecutivos[distrito.id]
+                es_publico = row["es_publico"].strip().lower() == "si"
+
+            # Insertar el registro
             REPSVMAgresor(
                 distrito=distrito,
-                materia_tipo_juzgado=materia_tipo_juzgado,
-                repsvm_delito_especifico=repsvm_delito_especifico,
-                repsvm_tipo_sentencia=repsvm_tipo_sentencia,
-                nombre=safe_string(row["nombre"]),
+                consecutivo=consecutivo,
+                delito_generico=safe_string(row["delito_generico"], save_enie=True),
+                delito_especifico=safe_string(row["delito_especifico"], save_enie=True),
+                es_publico=es_publico,
+                nombre=safe_string(row["nombre"], save_enie=True),
                 numero_causa=safe_string(row["numero_causa"]),
-                pena_impuesta=safe_string(row["pena_impuesta"], do_unidecode=False),
+                pena_impuesta=safe_string(row["pena_impuesta"], save_enie=True),
                 observaciones=safe_text(row["observaciones"]),
                 sentencia_url=safe_url(row["sentencia_url"]),
-                consecutivo=int(row["consecutivo"]),
+                tipo_juzgado=tipo_juzgado,
+                tipo_sentencia=tipo_sentencia,
+                estatus=row["estatus"],
             ).save()
+
             # Incrementar contador
             contador += 1
             if contador % 100 == 0:
                 click.echo(f"  Van {contador}...")
+
     click.echo(f"{contador} alimentados.")
 
 
+@click.command()
+@click.option("--distrito_id", default=None, type=int, help="ID del Distrito")
+def reiniciar_consecutivos(distrito_id):
+    """Reiniciar los consecutivos de los agresores"""
+    distritos = []
+
+    # Si se especifica el ID del distrito
+    if distrito_id is not None:
+        distrito = Distrito.query.get(distrito_id)
+        if distrito is None:
+            click.echo(f"! No existe el distrito {distrito_id}")
+            return
+        distritos.append(distrito)
+    else:
+        distritos = Distrito.query.filter_by(estatus="A").order_by(Distrito.id).all()
+
+    # Bucle en todos los distritos
+    contador = 0
+    for distrito in distritos:
+        click.echo(f"  {repr(distrito)}...")
+        # Iniciar en cero
+        consecutivo = 0
+        # Bucle en todos los agresores del distrito ordenados por nombre
+        for agresor in REPSVMAgresor.query.filter(REPSVMAgresor.distrito == distrito).filter_by(estatus="A").order_by(REPSVMAgresor.nombre).all():
+            # Incrementar el consecutivo
+            consecutivo += 1
+            # Actualizar el consecutivo
+            agresor.consecutivo = consecutivo
+            agresor.save()
+            # Incrementar el contador
+            contador += 1
+            if contador % 100 == 0:
+                click.echo(f"  Van {contador}...")
+
+    click.echo(f"Se reiniciaron los consecutivos de {contador} agresores")
+
+
+@click.command()
+@click.option("--distrito_id", default=None, type=int, help="ID del Distrito")
+@click.option("--output", default="repsvm.csv", type=str, help="Archivo CSV a escribir")
+def respaldar(distrito_id, output):
+    """Respaldar los agresores a un archivo CSV"""
+    contador = 0
+
+    # Verificar que el archivo no exista
+    ruta = Path(output)
+    if ruta.exists():
+        click.echo(f"AVISO: {ruta.name} existe, no voy a sobreescribirlo.")
+        return
+
+    # Consultar los agresores
+    agresores = REPSVMAgresor.query
+
+    # Si se especifica el ID del distrito
+    if distrito_id is not None:
+        agresores = agresores.filter(REPSVMAgresor.distrito_id == distrito_id)
+        click.echo(f"Respaldando los agresores de REPSVM del distrito ID {distrito_id}...")
+    else:
+        click.echo("Respaldando TODOS los agresores de REPSVM...")
+
+    # Ordenar por distrito y consecutivo
+    agresores = agresores.order_by(REPSVMAgresor.id).all()
+
+    # Escribir el archivo CSV
+    with open(ruta, "w", encoding="utf8") as puntero:
+        respaldo = csv.writer(puntero)
+        encabezados = [
+            "id",
+            "distrito_id",
+            "distrito_nombre_corto",
+            "consecutivo",
+            "delito_generico",
+            "delito_especifico",
+            "es_publico",
+            "nombre",
+            "numero_causa",
+            "pena_impuesta",
+            "observaciones",
+            "sentencia_url",
+            "tipo_juzgado",
+            "tipo_sentencia",
+            "estatus",
+        ]
+        respaldo.writerow(encabezados)
+        for agresor in agresores:
+            contador += 1
+            fila = [
+                contador,
+                agresor.distrito_id,
+                agresor.distrito.nombre_corto,
+                agresor.consecutivo,
+                agresor.delito_generico,
+                agresor.delito_especifico,
+                agresor.es_publico,
+                agresor.nombre,
+                agresor.numero_causa,
+                agresor.pena_impuesta,
+                agresor.observaciones,
+                agresor.sentencia_url,
+                agresor.tipo_juzgado,
+                agresor.tipo_sentencia,
+                agresor.estatus,
+            ]
+            respaldo.writerow(fila)
+            if contador % 100 == 0:
+                click.echo(f"  Van {contador}...")
+    click.echo(f"Respaldados {contador} agresores en {ruta.name}")
+
+
+@click.command()
+@click.option("--output", default="repsvm.csv", type=str, help="Archivo CSV a escribir")
+def subir_descargable(output):
+    """Subir archivo CSV a Google Storage para descargar como datos abiertos"""
+    contador = 0
+    ruta = Path(output)
+
+    # Si el archivo existe, lo borramos
+    if ruta.exists():
+        ruta.unlink()
+
+    # Consultar los agresores que tengan es_publico en verdadero
+    agresores = REPSVMAgresor.query.filter_by(estatus="A").filter_by(es_publico=True).order_by(REPSVMAgresor.distrito_id, REPSVMAgresor.consecutivo).all()
+
+    # Escribir al archivo CSV
+    with open(ruta, "w", encoding="utf8") as puntero:
+        descargable = csv.writer(puntero)
+        encabezados = [
+            "distrito_nombre_corto",
+            "consecutivo",
+            "nombre",
+            "delito_generico",
+            "delito_especifico",
+            "numero_causa",
+            "pena_impuesta",
+            "observaciones",
+            "tipo_juzgado",
+            "tipo_sentencia",
+            "sentencia_url",
+        ]
+        descargable.writerow(encabezados)
+        for agresor in agresores:
+            contador += 1
+            fila = [
+                agresor.distrito.nombre_corto,
+                agresor.consecutivo,
+                agresor.nombre,
+                agresor.delito_generico,
+                agresor.delito_especifico,
+                agresor.numero_causa,
+                agresor.pena_impuesta,
+                agresor.observaciones,
+                agresor.tipo_juzgado,
+                agresor.tipo_sentencia,
+                agresor.sentencia_url,
+            ]
+            descargable.writerow(fila)
+            if contador % 100 == 0:
+                click.echo(f"  Van {contador}...")
+    click.echo(f"Descargables {contador} agresores en {ruta.name}")
+
+    # Subir el archivo a Google Storage
+    cloud_storage_bucket = os.getenv("CLOUD_STORAGE_DEPOSITO", None)
+    if cloud_storage_bucket is not None:
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(cloud_storage_bucket)
+        blob = bucket.blob(f"{SUBDIRECTORIO}/{ruta.name}")
+        blob.upload_from_filename(ruta, content_type="text/csv")
+        url = blob.public_url
+        click.echo(f"Archivo subido a {url}")
+
+
 cli.add_command(alimentar)
+cli.add_command(reiniciar_consecutivos)
+cli.add_command(respaldar)
+cli.add_command(subir_descargable)

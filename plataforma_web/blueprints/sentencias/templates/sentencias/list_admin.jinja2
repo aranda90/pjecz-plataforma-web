@@ -1,4 +1,5 @@
 {% extends 'layouts/app.jinja2' %}
+{% import 'macros/form_inline.jinja2' as f with context %}
 {% import 'macros/list.jinja2' as list %}
 {% import 'macros/topbar.jinja2' as topbar %}
 
@@ -29,23 +30,37 @@
 {% endblock %}
 
 {% block content %}
+    {# Datatable #}
     {% call list.card() %}
         <table id="sentencias_datatable" class="table {% if estatus == 'B'%}table-dark{% endif %} display nowrap" style="width:100%">
             <thead>
                 <tr>
-                    <th>Creados</th>
-                    <th>Autoridades</th>
-                    <th>Fechas</th>
-                    <th>Sentencias</th>
-                    <th>Expedientes</th>
-                    <th>Materias</th>
-                    <th>Tipos de Juicios</th>
-                    <th>P. Género</th>
-                    <th>Archivos</th>
+                    <th>ID</th>
+                    <th>Creado</th>
+                    <th>Autoridad</th>
+                    <th>Fecha</th>
+                    <th>Sentencia</th>
+                    <th>Expediente</th>
+                    <th>Materia</th>
+                    <th>Tipo de Juicio</th>
+                    <th>P. G.</th>
+                    <th>Archivo</th>
                 </tr>
             </thead>
         </table>
     {% endcall %}
+    {# Reporte #}
+    {% if form %}
+        {% call list.card(title='Reporte de V.P. de Sentencias') %}
+            {% call f.form_tag('sentencias.report', fid='sentencias_report_form') %}
+                {% call f.form_group(form.autoridad_id, type='hidden', value=autoridad.id) %}{% endcall %}
+                {% call f.form_group(form.fecha_desde, placeholder='Desde') %}{% endcall %}
+                {% call f.form_group(form.fecha_hasta, placeholder='Hasta') %}{% endcall %}
+                {% call f.form_group(form.por_tipos_de_juicios) %}{% endcall %}
+                {% call f.form_group(form.elaborar) %}{% endcall %}
+            {% endcall %}
+        {% endcall %}
+    {% endif %}
 {% endblock %}
 
 {% block custom_javascript %}
@@ -65,51 +80,38 @@
                 data: {{ filtros }}
             },
             columns: [
+                { data: "detalle" },
                 { data: "creado" },
                 { data: "autoridad" },
                 { data: "fecha" },
-                { data: "detalle" },
+                { data: "sentencia" },
                 { data: "expediente" },
                 { data: "materia_nombre" },
                 { data: "materia_tipo_juicio_descripcion" },
                 { data: "es_perspectiva_genero" },
                 { data: "archivo" }
             ],
-            order: [[ 0, "desc" ]],
+            ordering: false,
             columnDefs: [
                 {
-                    targets: 0,
-                    type: "date",
-                    render: function (data, type, row) {
-                        return moment.utc(data).local().format("YYYY-MM-DD HH:mm:ss");
-                    }
-                },
-                {
-                    targets: 2,
-                    type: "date",
-                    render: function (data, type, row) {
-                        return moment(data).format("DD MMM YYYY");
-                    }
-                },
-                {
-                    targets: 3,
+                    targets: 0, // detalle
                     data: null,
                     render: function(data, type, row, meta) {
-                        return '<a href="' + data.url + '">' + data.sentencia + '</a>';
+                        return '<a href="' + data.url + '">' + data.id + '</a>';
                     }
                 },
                 {
-                    targets: 6,
+                    targets: 7, // materia_tipo_juicio_descripcion
                     data: null,
                     render: function(data, type, row, meta) {
                         return data.length > 20 ? data.substr(0, 40) + '…' : data;
                     }
                 },
                 {
-                    targets: 8,
+                    targets: 9, // archivo
                     data: null,
                     render: function(data, type, row, meta) {
-                        return '<a href="' + data.url + '" target="_blank">PDF</a>';
+                        return '<a href="' + data.descargar_url + '" target="_blank">PDF</a>';
                     }
                 }
             ],

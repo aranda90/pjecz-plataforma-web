@@ -31,11 +31,11 @@ def alimentar_inv_redes():
                 click.echo(f"  AVISO: inv_red_id {inv_red_id} no es consecutivo")
                 continue
             InvRed(
-                nombre=safe_string(row["nombre"]),
+                nombre=safe_string(row["nombre"], save_enie=True),
                 tipo=safe_string(row["tipo"]),
                 estatus=row["estatus"],
             ).save()
             contador += 1
             if contador % 100 == 0:
                 click.echo(f"  Van {contador}...")
-    click.echo(f"  {contador} inventarios redes alimentadas")
+    click.echo(f"  {contador} redes alimentadas")

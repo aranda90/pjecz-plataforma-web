@@ -3,13 +3,16 @@ Listas de Acuerdos, vistas
 """
 import datetime
 import json
+from urllib.parse import quote
 
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from pytz import timezone
 from werkzeug.datastructures import CombinedMultiDict
 
 from lib.datatables import get_datatable_parameters, output_datatable_json
+from lib.exceptions import MyAnyError
+from lib.google_cloud_storage import get_blob_name_from_url, get_media_type_from_filename, get_file_from_gcs
 from lib.safe_string import safe_message, safe_string
 from lib.storage import GoogleCloudStorage, NotAllowedExtesionError, UnknownExtesionError, NotConfiguredError
 from lib.time_to_text import dia_mes_ano
@@ -18,7 +21,7 @@ from plataforma_web.blueprints.usuarios.decorators import permission_required
 from plataforma_web.blueprints.autoridades.models import Autoridad
 from plataforma_web.blueprints.bitacoras.models import Bitacora
 from plataforma_web.blueprints.distritos.models import Distrito
-from plataforma_web.blueprints.listas_de_acuerdos.forms import ListaDeAcuerdoNewForm, ListaDeAcuerdoMateriaNewForm, ListaDeAcuerdoSearchForm, ListaDeAcuerdoSearchAdminForm
+from plataforma_web.blueprints.listas_de_acuerdos.forms import ListaDeAcuerdoNewForm, ListaDeAcuerdoMateriaNewForm, ListaDeAcuerdoSearchForm, ListaDeAcuerdoSearchAdminForm, ListaDeAcuerdoReportForm
 from plataforma_web.blueprints.listas_de_acuerdos.models import ListaDeAcuerdo
 from plataforma_web.blueprints.listas_de_acuerdos_acuerdos.models import ListaDeAcuerdoAcuerdo
 from plataforma_web.blueprints.materias.models import Materia
@@ -29,10 +32,14 @@ listas_de_acuerdos = Blueprint("listas_de_acuerdos", __name__, template_folder="
 
 HUSO_HORARIO = "America/Mexico_City"
 MODULO = "LISTAS DE ACUERDOS"
-SUBDIRECTORIO = "Listas de Acuerdos"
-LIMITE_DIAS = 30  # Es el máximo, aunque autoridad.limite_dias_listas_de_acuerdos sea mayor, gana el menor
-LIMITE_ADMINISTRADORES_DIAS = 365  # Administradores pueden manipular un anio
-ORGANOS_JURISDICCIONALES_QUE_PUEDEN_ELEGIR_MATERIA = ("PLENO O SALA DEL TSJ", "TRIBUNAL DISTRITAL")
+LIMITE_DIAS = 365  # Es el máximo, aunque autoridad.limite_dias_listas_de_acuerdos sea mayor, gana el menor
+LIMITE_ADMINISTRADORES_DIAS = 730  # Administradores pueden manipular dos anios
+ORGANOS_JURISDICCIONALES_QUE_PUEDEN_ELEGIR_MATERIA = ("JUZGADO DE PRIMERA INSTANCIA ORAL", "PLENO O SALA DEL TSJ", "TRIBUNAL DISTRITAL")
+HORAS_BUENO = 14
+HORAS_CRITICO = 16
+
+# Roles que deben estar en la base de datos
+ROL_REPORTES_TODOS = ["ADMINISTRADOR", "ESTADISTICA", "VISITADURIA JUDICIAL"]
 
 
 @listas_de_acuerdos.before_request
@@ -61,16 +68,22 @@ def list_active():
             filtros=json.dumps({"estatus": "A"}),
             titulo="Todas las Listas de Acuerdo",
             estatus="A",
+            form=None,
         )
     # Si es jurisdiccional ve lo de su autoridad
     if current_user.autoridad.es_jurisdiccional:
         autoridad = current_user.autoridad
+        form = ListaDeAcuerdoReportForm()
+        form.autoridad_id.data = autoridad.id  # Oculto la autoridad del usuario
+        form.fecha_desde.data = datetime.date.today().replace(day=1)  # Por defecto fecha_desde es el primer dia del mes actual
+        form.fecha_hasta.data = datetime.date.today()  # Por defecto fecha_hasta es hoy
         return render_template(
             "listas_de_acuerdos/list.jinja2",
             autoridad=autoridad,
             filtros=json.dumps({"autoridad_id": autoridad.id, "estatus": "A"}),
             titulo=f"Listas de Acuerdos de {autoridad.distrito.nombre_corto}, {autoridad.descripcion_corta}",
             estatus="A",
+            form=form,
         )
     # Ninguno de los anteriores
     return redirect(url_for("listas_de_acuerdos.list_distritos"))
@@ -88,6 +101,7 @@ def list_inactive():
             filtros=json.dumps({"estatus": "B"}),
             titulo="Todas las Listas de Acuerdos inactivas",
             estatus="B",
+            form=None,
         )
     # Si es jurisdiccional ve lo de su autoridad
     if current_user.autoridad.es_jurisdiccional:
@@ -98,6 +112,7 @@ def list_inactive():
             filtros=json.dumps({"autoridad_id": autoridad.id, "estatus": "B"}),
             titulo=f"Listas de Acuerdos inactivas de {autoridad.distrito.nombre_corto}, {autoridad.descripcion_corta}",
             estatus="B",
+            form=None,
         )
     # Ninguno de los anteriores
     return redirect(url_for("listas_de_acuerdos.list_distritos"))
@@ -127,16 +142,21 @@ def list_autoridades(distrito_id):
 def list_autoridad_listas_de_acuerdos(autoridad_id):
     """Listado de Listas de Acuerdos activas de una autoridad"""
     autoridad = Autoridad.query.get_or_404(autoridad_id)
-    if current_user.can_admin("LISTAS DE ACUERDOS"):
+    form = None
+    plantilla = "listas_de_acuerdos/list.jinja2"
+    if current_user.can_admin("LISTAS DE ACUERDOS") or set(current_user.get_roles()).intersection(set(ROL_REPORTES_TODOS)):
         plantilla = "listas_de_acuerdos/list_admin.jinja2"
-    else:
-        plantilla = "listas_de_acuerdos/list.jinja2"
+        form = ListaDeAcuerdoReportForm()
+        form.autoridad_id.data = autoridad.id  # Oculto la autoridad que esta viendo
+        form.fecha_desde.data = datetime.date.today().replace(day=1)  # Por defecto fecha_desde es el primer dia del mes actual
+        form.fecha_hasta.data = datetime.date.today()  # Por defecto fecha_hasta es hoy
     return render_template(
         plantilla,
         autoridad=autoridad,
         filtros=json.dumps({"autoridad_id": autoridad.id, "estatus": "A"}),
         titulo=f"Listas de Acuerdos de {autoridad.distrito.nombre_corto}, {autoridad.descripcion_corta}",
         estatus="A",
+        form=form,
     )
 
 
@@ -155,6 +175,7 @@ def list_autoridad_listas_de_acuerdos_inactive(autoridad_id):
         filtros=json.dumps({"autoridad_id": autoridad.id, "estatus": "B"}),
         titulo=f"Listas de Acuerdos inactivas de {autoridad.distrito.nombre_corto}, {autoridad.descripcion_corta}",
         estatus="B",
+        form=None,
     )
 
 
@@ -233,18 +254,46 @@ def datatable_json():
         consulta = consulta.filter(ListaDeAcuerdo.fecha <= request.form["fecha_hasta"])
     registros = consulta.order_by(ListaDeAcuerdo.fecha.desc()).offset(start).limit(rows_per_page).all()
     total = consulta.count()
+    # Zona horaria local
+    local_tz = timezone(HUSO_HORARIO)
+    # Medianoche en HH:MM:SS
+    medianoche = datetime.time.min
     # Elaborar datos para DataTable
     data = []
     for lista_de_acuerdo in registros:
+        # La columna creado esta en UTC, convertir a local
+        creado_local = lista_de_acuerdo.creado.astimezone(local_tz)
+        # Determinar el tiempo bueno
+        tiempo_limite_bueno = datetime.datetime.combine(
+            lista_de_acuerdo.fecha,
+            medianoche,
+        ) + datetime.timedelta(hours=HORAS_BUENO)
+        # Determinar el fiempo critico
+        tiempo_limite_critico = datetime.datetime.combine(
+            lista_de_acuerdo.fecha,
+            medianoche,
+        ) + datetime.timedelta(hours=HORAS_CRITICO)
+        # Por defecto el semaforo es verde (0)
+        semaforo = 0
+        # Si creado_local es mayor a tiempo_limite_bueno, entonces el semaforo es amarillo (1)
+        if creado_local > local_tz.localize(tiempo_limite_bueno):
+            semaforo = 1
+        # Si creado_local es mayor a tiempo_limite_critico, entonces el semaforo es rojo (2)
+        if creado_local > local_tz.localize(tiempo_limite_critico):
+            semaforo = 2
         data.append(
             {
-                "fecha": lista_de_acuerdo.fecha.strftime("%Y-%m-%d 00:00:00"),
+                "creado": {
+                    "tiempo": creado_local.strftime("%Y-%m-%d %H:%M"),
+                    "semaforo": semaforo,
+                },
+                "fecha": lista_de_acuerdo.fecha.strftime("%Y-%m-%d"),
                 "detalle": {
                     "descripcion": lista_de_acuerdo.descripcion,
                     "url": url_for("listas_de_acuerdos.detail", lista_de_acuerdo_id=lista_de_acuerdo.id),
                 },
                 "archivo": {
-                    "url": lista_de_acuerdo.url,
+                    "descargar_url": lista_de_acuerdo.descargar_url,
                 },
             }
         )
@@ -271,27 +320,76 @@ def datatable_json_admin():
         consulta = consulta.filter(ListaDeAcuerdo.fecha >= request.form["fecha_desde"])
     if "fecha_hasta" in request.form:
         consulta = consulta.filter(ListaDeAcuerdo.fecha <= request.form["fecha_hasta"])
-    registros = consulta.order_by(ListaDeAcuerdo.fecha.desc()).offset(start).limit(rows_per_page).all()
+    registros = consulta.order_by(ListaDeAcuerdo.id.desc()).offset(start).limit(rows_per_page).all()
     total = consulta.count()
+    # Zona horaria local
+    local_tz = timezone(HUSO_HORARIO)
+    # Medianoche en HH:MM:SS
+    medianoche = datetime.time.min
     # Elaborar datos para DataTable
     data = []
     for lista_de_acuerdo in registros:
+        # La columna creado esta en UTC, convertir a local
+        creado_local = lista_de_acuerdo.creado.astimezone(local_tz)
+        # Determinar el tiempo bueno
+        tiempo_limite_bueno = datetime.datetime.combine(
+            lista_de_acuerdo.fecha,
+            medianoche,
+        ) + datetime.timedelta(hours=HORAS_BUENO)
+        # Determinar el fiempo critico
+        tiempo_limite_critico = datetime.datetime.combine(
+            lista_de_acuerdo.fecha,
+            medianoche,
+        ) + datetime.timedelta(hours=HORAS_CRITICO)
+        # Por defecto el semaforo es verde (0)
+        semaforo = 0
+        # Si la autoridad tiene limite_dias_listas_de_acuerdos igual a cero
+        if lista_de_acuerdo.autoridad.limite_dias_listas_de_acuerdos == 0:
+            # Si creado_local es mayor a tiempo_limite_bueno, entonces el semaforo es amarillo (1)
+            if creado_local > local_tz.localize(tiempo_limite_bueno):
+                semaforo = 1
+            # Si creado_local es mayor a tiempo_limite_critico, entonces el semaforo es rojo (2)
+            if creado_local > local_tz.localize(tiempo_limite_critico):
+                semaforo = 2
         data.append(
             {
-                "creado": lista_de_acuerdo.creado.strftime("%Y-%m-%d %H:%M:%S"),
-                "autoridad": lista_de_acuerdo.autoridad.clave,
-                "fecha": lista_de_acuerdo.fecha.strftime("%Y-%m-%d 00:00:00"),
                 "detalle": {
-                    "descripcion": lista_de_acuerdo.descripcion,
+                    "id": lista_de_acuerdo.id,
                     "url": url_for("listas_de_acuerdos.detail", lista_de_acuerdo_id=lista_de_acuerdo.id),
                 },
+                "creado": {
+                    "tiempo": creado_local.strftime("%Y-%m-%d %H:%M"),
+                    "semaforo": semaforo,
+                },
+                "autoridad": lista_de_acuerdo.autoridad.clave,
+                "fecha": lista_de_acuerdo.fecha.strftime("%Y-%m-%d"),
+                "descripcion": lista_de_acuerdo.descripcion,
                 "archivo": {
-                    "url": lista_de_acuerdo.url,
+                    "descargar_url": url_for("listas_de_acuerdos.download", url=quote(lista_de_acuerdo.url)),
                 },
             }
         )
     # Entregar JSON
     return output_datatable_json(draw, total, data)
+
+
+@listas_de_acuerdos.route("/listas_de_acuerdos/descargar", methods=["GET"])
+@permission_required(MODULO, Permiso.ADMINISTRAR)
+def download():
+    """Descargar archivo desde Google Cloud Storage"""
+    url = request.args.get("url")
+    try:
+        # Obtener nombre del blob
+        blob_name = get_blob_name_from_url(url)
+        # Obtener tipo de media
+        media_type = get_media_type_from_filename(blob_name)
+        # Obtener archivo
+        archivo = get_file_from_gcs(current_app.config["CLOUD_STORAGE_DEPOSITO_LISTAS_DE_ACUERDOS"], blob_name)
+    except MyAnyError as error:
+        flash(str(error), "warning")
+        return redirect(url_for("listas_de_acuerdos.list_active"))
+    # Entregar archivo
+    return current_app.response_class(archivo, mimetype=media_type)
 
 
 @listas_de_acuerdos.route("/listas_de_acuerdos/refrescar/<int:autoridad_id>")
@@ -397,10 +495,11 @@ def new():
 
         # Inicializar la liberia Google Cloud Storage con el directorio base, la fecha, las extensiones permitidas y los meses como palabras
         gcstorage = GoogleCloudStorage(
-            base_directory=f"{SUBDIRECTORIO}/{autoridad.directorio_listas_de_acuerdos}",
+            base_directory=autoridad.directorio_listas_de_acuerdos,
             upload_date=fecha,
             allowed_extensions=["pdf"],
             month_in_word=True,
+            bucket_name=current_app.config["CLOUD_STORAGE_DEPOSITO_LISTAS_DE_ACUERDOS"],
         )
 
         # Validar archivo
@@ -527,10 +626,11 @@ def new_for_autoridad(autoridad_id):
 
         # Inicializar la liberia Google Cloud Storage con el directorio base, la fecha, las extensiones permitidas y los meses como palabras
         gcstorage = GoogleCloudStorage(
-            base_directory=f"{SUBDIRECTORIO}/{autoridad.directorio_listas_de_acuerdos}",
+            base_directory=autoridad.directorio_listas_de_acuerdos,
             upload_date=fecha,
             allowed_extensions=["pdf"],
             month_in_word=True,
+            bucket_name=current_app.config["CLOUD_STORAGE_DEPOSITO_LISTAS_DE_ACUERDOS"],
         )
 
         # Validar archivo
@@ -672,3 +772,43 @@ def recover(lista_de_acuerdo_id):
             else:
                 flash("No tiene permiso para recuperar o sólo puede recuperar de hoy.", "warning")
     return redirect(url_for("listas_de_acuerdos.detail", lista_de_acuerdo_id=lista_de_acuerdo_id))
+
+
+@listas_de_acuerdos.route("/listas_de_acuerdos/reporte", methods=["GET", "POST"])
+def report():
+    """Elaborar reporte de listas de acuerdos"""
+    # Preparar el formulario
+    form = ListaDeAcuerdoReportForm()
+    # Si viene el formulario
+    if form.validate():
+        # Tomar los valores del formulario
+        autoridad = Autoridad.query.get_or_404(int(form.autoridad_id.data))
+        fecha_desde = form.fecha_desde.data
+        fecha_hasta = form.fecha_hasta.data
+        # Si la fecha_desde es posterior a la fecha_hasta, se intercambian
+        if fecha_desde > fecha_hasta:
+            fecha_desde, fecha_hasta = fecha_hasta, fecha_desde
+        # Si no es administrador, ni tiene un rol para elaborar reportes de todos
+        if not current_user.can_admin("LISTAS DE ACUERDOS") and not set(current_user.get_roles()).intersection(set(ROL_REPORTES_TODOS)):
+            # Si la autoridad del usuario no es la del formulario, se niega el acceso
+            if current_user.autoridad_id != autoridad.id:
+                flash("No tiene permiso para acceder a este reporte.", "warning")
+                return redirect(url_for("listas_de_acuerdos.list_active"))
+        # Entregar el reporte
+        return render_template(
+            "listas_de_acuerdos/report.jinja2",
+            autoridad=autoridad,
+            fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta,
+            filtros=json.dumps(
+                {
+                    "autoridad_id": autoridad.id,
+                    "estatus": "A",
+                    "fecha_desde": fecha_desde.strftime("%Y-%m-%d"),
+                    "fecha_hasta": fecha_hasta.strftime("%Y-%m-%d"),
+                }
+            ),
+        )
+    # No viene el formulario, por lo tanto se advierte del error
+    flash("Error: datos incorrectos para hacer el reporte.", "warning")
+    return redirect(url_for("listas_de_acuerdos.list_active"))

@@ -10,10 +10,14 @@ from lib.datatables import get_datatable_parameters, output_datatable_json
 from lib.safe_string import safe_message, safe_string
 from lib.storage import GoogleCloudStorage, NotAllowedExtesionError, UnknownExtesionError, NotConfiguredError
 
+from plataforma_web.blueprints.autoridades.models import Autoridad
 from plataforma_web.blueprints.bitacoras.models import Bitacora
-from plataforma_web.blueprints.cid_formatos.forms import CIDFormatoForm
+from plataforma_web.blueprints.cid_areas.models import CIDArea
+from plataforma_web.blueprints.cid_areas_autoridades.models import CIDAreaAutoridad
+from plataforma_web.blueprints.cid_formatos.forms import CIDFormatoForm, CIDFormatoEdit, CIDFormatoEditAdmin
 from plataforma_web.blueprints.cid_formatos.models import CIDFormato
 from plataforma_web.blueprints.cid_procedimientos.models import CIDProcedimiento
+from plataforma_web.blueprints.distritos.models import Distrito
 from plataforma_web.blueprints.modulos.models import Modulo
 from plataforma_web.blueprints.permisos.models import Permiso
 from plataforma_web.blueprints.usuarios.decorators import permission_required
@@ -29,6 +33,7 @@ ROL_COORDINADOR = "SICGD COORDINADOR"
 ROL_DIRECTOR_JEFE = "SICGD DIRECTOR O JEFE"
 ROL_DUENO_PROCESO = "SICGD DUENO DE PROCESO"
 ROL_INVOLUCRADO = "SICGD INVOLUCRADO"
+ROLES_CON_FORMATOS_PROPIOS = (ROL_COORDINADOR, ROL_DIRECTOR_JEFE, ROL_DUENO_PROCESO)
 
 
 @cid_formatos.before_request
@@ -60,6 +65,69 @@ def datatable_json():
     if "usuario_id" in request.form:
         consulta = consulta.join(CIDProcedimiento)
         consulta = consulta.filter(CIDProcedimiento.usuario_id == request.form["usuario_id"])
+    # Si viene el filtro con un listado de ids de areas, filtrar por ellas
+    if "cid_areas[]" in request.form:
+        # Se convierte el parametro (numeros separados por comas) a una lista
+        listado_areas_ids = request.form["cid_areas[]"].split(",")
+        consulta = consulta.filter(CIDProcedimiento.cid_area_id.in_(listado_areas_ids))
+    registros = consulta.order_by(CIDFormato.descripcion).offset(start).limit(rows_per_page).all()
+    total = consulta.count()
+    # Elaborar datos para DataTable
+    data = []
+    for resultado in registros:
+        data.append(
+            {
+                "detalle": {
+                    "id": resultado.id,
+                    "url": url_for("cid_formatos.detail", cid_formato_id=resultado.id),
+                },
+                "cid_procedimiento": {
+                    "titulo_procedimiento": resultado.procedimiento.titulo_procedimiento,
+                    "url": url_for("cid_procedimientos.detail", cid_procedimiento_id=resultado.procedimiento.id) if current_user.can_view("CID PROCEDIMIENTOS") else "",
+                },
+                "descripcion": resultado.descripcion,
+                "descargar": {
+                    "archivo": resultado.archivo,
+                    "url": resultado.url,
+                },
+                "autoridad": resultado.procedimiento.autoridad.clave,
+                "cid_area": {
+                    "clave": resultado.cid_area.clave,
+                    "url": url_for("cid_areas.detail", cid_area_id=resultado.cid_area_id) if current_user.can_view("CID AREAS") else "",
+                },
+            }
+        )
+    # Entregar JSON
+    return output_datatable_json(draw, total, data)
+
+
+@cid_formatos.route("/cid_formatos/datatable_json_admin", methods=["GET", "POST"])
+def datatable_json_admin():
+    """DataTable JSON para listado de Formatos"""
+    # Tomar parámetros de Datatables
+    draw, start, rows_per_page = get_datatable_parameters()
+    # Consultar
+    consulta = CIDFormato.query
+    if "estatus" in request.form:
+        consulta = consulta.filter_by(estatus=request.form["estatus"])
+    else:
+        consulta = consulta.filter_by(estatus="A")
+    if "descripcion" in request.form:
+        consulta = consulta.filter(CIDFormato.descripcion.contains(safe_string(request.form["descripcion"])))
+    if "cid_procedimiento" in request.form:
+        consulta = consulta.join(CIDProcedimiento)
+        consulta = consulta.filter(CIDProcedimiento.titulo_procedimiento.contains(safe_string(request.form["cid_procedimiento"])))
+    if "seguimiento" in request.form:
+        consulta = consulta.join(CIDProcedimiento)
+        consulta = consulta.filter(CIDProcedimiento.seguimiento == request.form["seguimiento"])
+    if "usuario_id" in request.form:
+        consulta = consulta.join(CIDProcedimiento)
+        consulta = consulta.filter(CIDProcedimiento.usuario_id == request.form["usuario_id"])
+    # Si viene el filtro con un listado de ids de areas, filtrar por ellas
+    if "cid_areas[]" in request.form:
+        # Se convierte el parametro (numeros separados por comas) a una lista
+        listado_areas_ids = request.form["cid_areas[]"].split(",")
+        consulta = consulta.filter(CIDProcedimiento.cid_area_id.in_(listado_areas_ids))
     registros = consulta.order_by(CIDFormato.id.desc()).offset(start).limit(rows_per_page).all()
     total = consulta.count()
     # Elaborar datos para DataTable
@@ -80,6 +148,11 @@ def datatable_json():
                     "archivo": resultado.archivo,
                     "url": resultado.url,
                 },
+                "autoridad": resultado.procedimiento.autoridad.clave,
+                "cid_area": {
+                    "clave": resultado.cid_area.clave,
+                    "url": url_for("cid_areas.detail", cid_area_id=resultado.cid_area_id) if current_user.can_view("CID AREAS") else "",
+                },
             }
         )
     # Entregar JSON
@@ -88,87 +161,131 @@ def datatable_json():
 
 @cid_formatos.route("/cid_formatos")
 def list_active():
-    """Listado por defecto de Formatos"""
-    # si es administrador, mostrar todos los Formatos
+    """Listado de formatos autorizados de mis áreas"""
+    # Consultar las areas del usuario
+    cid_areas = CIDArea.query.join(CIDAreaAutoridad).filter(CIDAreaAutoridad.autoridad_id == current_user.autoridad.id).all()
+    # Definir listado de ids de areas
+    cid_areas_ids = [cid_area.id for cid_area in cid_areas]
+    # Si no tiene areas asignadas, redirigir a la lista de formatos autorizados
+    if len(cid_areas_ids) == 0:
+        return redirect(url_for("cid_formatos.list_authorized"))
+    # Consultar los roles del usuario
+    current_user_roles = set(current_user.get_roles())
+    # Si es administrador, usar list_admin.jinja2
     if current_user.can_admin(MODULO):
         return render_template(
-            "cid_formatos/list.jinja2",
-            titulo="Todos los Formatos",
-            filtros=json.dumps({"estatus": "A"}),
+            "cid_formatos/list_admin.jinja2",
+            titulo="Formatos autorizados de mis áreas",
+            filtros=json.dumps({"estatus": "A", "seguimiento": "AUTORIZADO", "cid_areas": cid_areas_ids}),
             estatus="A",
+            show_button_list_owned=current_user_roles.intersection(ROLES_CON_FORMATOS_PROPIOS),
+            show_button_list_all=True,
+            show_button_list_all_autorized=True,
+            show_button_my_autorized=True,
         )
-    # Consultar los roles del usuario
-    current_user_roles = current_user.get_roles()
-    # Si es involucrado, mostrar todos los formatos
+    # De lo contrario, usar list.jinja2
     return render_template(
         "cid_formatos/list.jinja2",
-        filtros=json.dumps({"estatus": "A", "seguimiento": "AUTORIZADO"}),
-        titulo="Formatos Autorizados",
+        titulo="Formatos autorizados de mis áreas",
+        filtros=json.dumps({"estatus": "A", "seguimiento": "AUTORIZADO", "cid_areas": cid_areas_ids}),
         estatus="A",
-        show_button_list_owned=ROL_COORDINADOR in current_user_roles or ROL_DIRECTOR_JEFE in current_user_roles or ROL_DUENO_PROCESO in current_user_roles,
+        show_button_list_owned=current_user_roles.intersection(ROLES_CON_FORMATOS_PROPIOS),
         show_button_list_all=ROL_COORDINADOR in current_user_roles,
+        show_button_list_all_autorized=True,
+        show_button_my_autorized=True,
     )
 
 
 # List Formatos autorizados
 @cid_formatos.route("/cid_formatos/autorizados")
 def list_authorized():
-    """Listado de Formatos autorizados"""
-    current_user_roles = current_user.get_roles()
+    """Listado de todos los formatos autorizados"""
+    # Consultar los roles del usuario
+    current_user_roles = set(current_user.get_roles())
+    # Si es administrador, usar list_admin.jinja2
+    if current_user.can_admin(MODULO):
+        return render_template(
+            "cid_formatos/list_admin.jinja2",
+            titulo="Todos los formatos autorizados",
+            filtros=json.dumps({"estatus": "A", "seguimiento": "AUTORIZADO"}),
+            estatus="A",
+            show_button_list_owned=current_user_roles.intersection(ROLES_CON_FORMATOS_PROPIOS),
+            show_button_list_all=True,
+            show_button_list_all_autorized=True,
+            show_button_my_autorized=True,
+        )
+    # De lo contrario, usar list.jinja2
     return render_template(
         "cid_formatos/list.jinja2",
+        titulo="Todos los formatos autorizados",
         filtros=json.dumps({"estatus": "A", "seguimiento": "AUTORIZADO"}),
-        titulo="Formatos Autorizados",
         estatus="A",
-        show_button_list_owned=current_user.can_admin(MODULO) or ROL_COORDINADOR in current_user_roles or ROL_DIRECTOR_JEFE in current_user_roles or ROL_DUENO_PROCESO in current_user_roles,
-        show_button_list_all=current_user.can_admin(MODULO) or ROL_COORDINADOR in current_user_roles,
+        show_button_list_owned=current_user_roles.intersection(ROLES_CON_FORMATOS_PROPIOS),
+        show_button_list_all=ROL_COORDINADOR in current_user_roles,
+        show_button_list_all_autorized=True,
+        show_button_my_autorized=True,
     )
 
 
 @cid_formatos.route("/cid_formatos/propios")
 def list_owned():
-    """Listado de Formatos propios"""
-    current_user_roles = current_user.get_roles()  # Si es administrador, coordinador, director o jefe o dueno de proceso, mostrar los procedimientos propios
-    if current_user.can_admin(MODULO) or ROL_COORDINADOR in current_user_roles or ROL_DIRECTOR_JEFE in current_user_roles or ROL_DUENO_PROCESO in current_user_roles:
+    """Listado de formatos propios"""
+    # Consultar los roles del usuario
+    current_user_roles = set(current_user.get_roles())
+    # Si es administrador, usar list_admin.jinja2
+    if current_user.can_admin(MODULO):
         return render_template(
-            "cid_formatos/list.jinja2",
+            "cid_formatos/list_admin.jinja2",
             filtros=json.dumps({"estatus": "A", "usuario_id": current_user.id}),
             titulo="Formatos propios",
             estatus="A",
-            show_button_list_owned=True,
-            show_button_list_all=current_user.can_admin(MODULO) or ROL_COORDINADOR in current_user_roles,
+            show_button_list_owned=current_user_roles.intersection(ROLES_CON_FORMATOS_PROPIOS),
+            show_button_list_all=ROL_COORDINADOR in current_user_roles,
+            show_button_list_all_autorized=True,
+            show_button_my_autorized=True,
         )
-    # Si no, redirigir a la lista general
-    return redirect(url_for("cid_formatos.list_active"))
-
-
-@cid_formatos.route("/cid_formatos/todos")
-def list_all():
-    """Listado de Todos los Formatos"""
-    current_user_roles = current_user.get_roles()
-    # Si es administrador, coordinador, mostrar todos los formatos
-    if current_user.can_admin(MODULO) or ROL_COORDINADOR in current_user_roles:
-        return render_template(
-            "cid_formatos/list.jinja2",
-            filtros=json.dumps({"estatus": "A"}),
-            titulo="Todos los Formatos",
-            estatus="A",
-            show_button_list_owned=True,
-            show_button_list_all=True,
-        )
-    # Si no, redirigir a la lista general
-    return redirect(url_for("cid_formatos.list_active"))
-
-
-@cid_formatos.route("/cid_formatos/inactivos")
-@permission_required(MODULO, Permiso.MODIFICAR)
-def list_inactive():
-    """Listado de Formatos propios eliminados"""
+    # De lo contrario, usar list.jinja2
     return render_template(
         "cid_formatos/list.jinja2",
-        filtros=json.dumps({"estatus": "B", "usuario_id": current_user.id}),
-        titulo="Formatos propios eliminados",
+        titulo="Formatos propios",
+        filtros=json.dumps({"estatus": "A", "usuario_id": current_user.id}),
+        estatus="A",
+        show_button_list_owned=current_user_roles.intersection(ROLES_CON_FORMATOS_PROPIOS),
+        show_button_list_all=ROL_COORDINADOR in current_user_roles,
+        show_button_list_all_autorized=True,
+        show_button_my_autorized=True,
+    )
+
+
+@cid_formatos.route("/cid_formatos/activos")
+@permission_required(MODULO, Permiso.ADMINISTRAR)
+def list_all_active():
+    """Listado de formatos activos, solo para administrador"""
+    return render_template(
+        "cid_formatos/list_admin.jinja2",
+        filtros=json.dumps({"estatus": "A"}),
+        titulo="Todos los Formatos activos",
+        estatus="A",
+        show_button_list_owned=True,
+        show_button_list_all=True,
+        show_button_list_all_autorized=True,
+        show_button_my_autorized=True,
+    )
+
+
+@cid_formatos.route("/cid_formatos/eliminados")
+@permission_required(MODULO, Permiso.ADMINISTRAR)
+def list_all_inactive():
+    """Listado de formatos eliminados, solo para administrador"""
+    return render_template(
+        "cid_formatos/list_admin.jinja2",
+        filtros=json.dumps({"estatus": "B"}),
+        titulo="Todos los formatos eliminados",
         estatus="B",
+        show_button_list_owned=True,
+        show_button_list_all=True,
+        show_button_list_all_autorized=True,
+        show_button_my_autorized=True,
     )
 
 
@@ -176,7 +293,11 @@ def list_inactive():
 def detail(cid_formato_id):
     """Detalle de un CID Formato"""
     cid_formato = CIDFormato.query.get_or_404(cid_formato_id)
-    return render_template("cid_formatos/detail.jinja2", cid_formato=cid_formato)
+    return render_template(
+        "cid_formatos/detail.jinja2",
+        cid_formato=cid_formato,
+        show_button_edit_admin=current_user.can_admin(MODULO) or ROL_COORDINADOR in current_user.get_roles(),
+    )
 
 
 @cid_formatos.route("/cid_formatos/nuevo/<int:cid_procedimiento_id>", methods=["GET", "POST"])
@@ -214,6 +335,7 @@ def new(cid_procedimiento_id):
             cid_formato = CIDFormato(
                 procedimiento=cid_procedimiento,
                 descripcion=descripcion,
+                cid_area_id=1,
             )
             cid_formato.save()
             # Subir el archivo a la nube
@@ -247,7 +369,7 @@ def new(cid_procedimiento_id):
 def edit(cid_formato_id):
     """Editar CID Formato"""
     cid_formato = CIDFormato.query.get_or_404(cid_formato_id)
-    form = CIDFormatoForm()
+    form = CIDFormatoEdit()
     if form.validate_on_submit():
         cid_formato.descripcion = safe_string(form.descripcion.data)
         cid_formato.save()
@@ -263,6 +385,47 @@ def edit(cid_formato_id):
     form.procedimiento_titulo.data = cid_formato.procedimiento.titulo_procedimiento  # Read only
     form.descripcion.data = cid_formato.descripcion
     return render_template("cid_formatos/edit.jinja2", form=form, cid_formato=cid_formato)
+
+
+# Cambiar la Autoridad al formato
+@cid_formatos.route("/cid_formatos/modificar/<int:cid_formato_id>", methods=["GET", "POST"])
+@permission_required(MODULO, Permiso.MODIFICAR)
+def edit_admin(cid_formato_id):
+    """Modificar autoridad formatos"""
+    # Consultar los roles del usuario
+    current_user_roles = current_user.get_roles()
+    # Si NO es administrador o coordinador, redirigir a la edicion normal
+    if not (current_user.can_admin(MODULO) or ROL_COORDINADOR in current_user_roles):
+        return redirect(url_for("cid_formatos.edit", cid_formato_id=cid_formato_id))
+    # Consultar el Formato
+    cid_formato = CIDFormato.query.get_or_404(cid_formato_id)
+    # Si viene el formulario
+    form = CIDFormatoEditAdmin()
+    if form.validate_on_submit():
+        autoridad = Autoridad.query.get_or_404(form.autoridad.data)
+        cid_formato.procedimiento.autoridad = autoridad
+        cid_formato.save()
+        # Registrar en la bitácora
+        bitacora = Bitacora(
+            modulo=Modulo.query.filter_by(nombre=MODULO).first(),
+            usuario=current_user,
+            descripcion=safe_message(f"Modificada la Autoridad del Formato {cid_formato.id}"),
+            url=url_for("cid_formatos.detail", cid_formato_id=cid_formato.id),
+        )
+        bitacora.save()
+        flash(bitacora.descripcion, "success")
+        return redirect(bitacora.url)
+    # Mostrar el formulario
+    distritos = Distrito.query.filter_by(estatus="A").order_by(Distrito.nombre).all()  # Combo distritos-autoridades
+    autoridades = Autoridad.query.filter_by(estatus="A").order_by(Autoridad.clave).all()  # Combo distritos-autoridades
+    form.procedimiento_titulo.data = cid_formato.procedimiento.titulo_procedimiento
+    return render_template(
+        "cid_formatos/edit_admin.jinja2",
+        form=form,
+        cid_formato=cid_formato,
+        distritos=distritos,
+        autoridades=autoridades,
+    )
 
 
 @cid_formatos.route("/cid_formatos/eliminar/<int:cid_formato_id>")

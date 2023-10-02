@@ -14,7 +14,12 @@ class Domicilio(db.Model, UniversalMixin):
     # Clave primaria
     id = db.Column(db.Integer, primary_key=True)
 
+    # Clave foránea
+    distrito_id = db.Column(db.Integer, db.ForeignKey("distritos.id"), index=True, nullable=False)
+    distrito = db.relationship("Distrito", back_populates="domicilios")
+
     # Columnas
+    edificio = db.Column(db.String(64), nullable=True, unique=True)
     estado = db.Column(db.String(64), nullable=False)
     municipio = db.Column(db.String(64), nullable=False)
     calle = db.Column(db.String(256), nullable=False)
@@ -28,6 +33,7 @@ class Domicilio(db.Model, UniversalMixin):
     # Hijos
     centros_trabajos = db.relationship("CentroTrabajo", back_populates="domicilio", lazy="noload")
     oficinas = db.relationship("Oficina", back_populates="domicilio", lazy="noload")
+    siga_salas = db.relationship("SIGASala", back_populates="domicilio", lazy="noload")
 
     def elaborar_completo(self):
         """Elaborar completo"""

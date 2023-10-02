@@ -18,9 +18,12 @@
 
 {% block content %}
     {% call detail.card(estatus=distrito.estatus) %}
+        {{ detail.label_value_big('Clave', distrito.clave) }}
         {{ detail.label_value('Nombre', distrito.nombre) }}
         {{ detail.label_value('Nombre corto', distrito.nombre_corto) }}
         {{ detail.label_value_boolean('Es Distrito Judicial', distrito.es_distrito_judicial) }}
+        {{ detail.label_value_boolean('NUEVO Es Distrito (geográfico)', distrito.es_distrito) }}
+        {{ detail.label_value_boolean('NUEVO Es Jurisdiccional', distrito.es_jurisdiccional) }}
         {{ detail.label_value('Creado', moment(distrito.creado).format('llll')) }}
     {% endcall %}
     {% if current_user.can_view('AUTORIDADES') %}
@@ -32,6 +35,8 @@
                         <th>Descripción corta</th>
                         <th>Órgano Jurisdiccional</th>
                         <th>Materia</th>
+                        <th>Sede</th>
+                        <th>Extinto</th>
                     </tr>
                 </thead>
             </table>
@@ -43,30 +48,9 @@
                 <thead>
                     <tr>
                         <th>Clave</th>
-                        <th>Descripción</th>
-                        <th>Domicilio</th>
-                        <th>Apertura</th>
-                        <th>Cierre</th>
-                        <th>L. P.</th>
-                    </tr>
-                </thead>
-            </table>
-        {% endcall %}
-    {% endif %}
-    {% if current_user.can_view('REPSVM AGRESORES') %}
-        {% call detail.card('REPSVM Agresores') %}
-            <table id="repsvm_agresores_datatable" class="table display nowrap" style="width:100%">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Consecutivo</th>
-                        <th>T. Juzgado</th>
-                        <th>Delito Específico</th>
-                        <th>T. Sentencia</th>
-                        <th>Nombre</th>
-                        <th>No. Causa</th>
-                        <th>Pena Impuesta</th>
-                        <th>Sentencia URL</th>
+                        <th>Descripción corta</th>
+                        <th>Edificio</th>
+                        <th>Tipo</th>
                     </tr>
                 </thead>
             </table>
@@ -82,13 +66,16 @@
     {{ detail.config_datatable() }}
     {% if current_user.can_view('AUTORIDADES') %}
         <script>
+            // DataTable Autoridades
             configDataTable['ajax']['url'] = '/autoridades/datatable_json';
             configDataTable['ajax']['data'] = { 'estatus': "A", 'distrito_id': {{ distrito.id}} };
             configDataTable['columns'] = [
                 { data: "detalle" },
                 { data: "descripcion_corta" },
                 { data: "organo_jurisdiccional" },
-                { data: "materia" }
+                { data: "materia" },
+                { data: "sede" },
+                { data: "es_extinto" }
             ];
             configDataTable['columnDefs'] = [
                 {
@@ -98,32 +85,36 @@
                         return '<a href="' + data.url + '">' + data.clave + '</a>';
                     }
                 },
-            {
-                targets: 3, // materia
-                data: null,
-                render: function(data, type, row, meta) {
-                    if (data.url == '') {
-                        return data.nombre;
-                    } else {
-                        return '<a href="' + data.url + '">' + data.nombre + '</a>';
+                {
+                    targets: 3, // materia
+                    data: null,
+                    render: function(data, type, row, meta) {
+                        if (data.url == '') {
+                            return data.nombre;
+                        } else {
+                            return '<a href="' + data.url + '">' + data.nombre + '</a>';
+                        }
                     }
                 }
-            }
             ];
+            configDataTable['rowCallback'] = function (row, data) {
+                if (data.es_extinto == 'EXTINTO') {
+                    $(row).css("background-color", "#c0c0c0");
+                }
+            };
             $('#autoridades_datatable').DataTable(configDataTable);
         </script>
     {% endif %}
     {% if current_user.can_view('OFICINAS') %}
         <script>
+            // DataTable Oficinas
             configDataTable['ajax']['url'] = '/oficinas/datatable_json';
             configDataTable['ajax']['data'] = { 'estatus': "A", 'distrito_id': {{ distrito.id}} };
             configDataTable['columns'] = [
                 { data: "detalle" },
                 { data: "descripcion_corta" },
                 { data: "domicilio" },
-                { data: "apertura" },
-                { data: "cierre" },
-                { data: "limite_personas" }
+                { data: "tipo" }
             ];
             configDataTable['columnDefs'] = [
                 {
@@ -144,10 +135,10 @@
                     targets: 2, // domicilio
                     data: null,
                     render: function(data, type, row, meta) {
-                        if (data.completo.length > 32) {
-                            texto = data.completo.substr(0, 32) + '…';
+                        if (data.edificio.length > 32) {
+                            texto = data.edificio.substr(0, 32) + '…';
                         } else {
-                            texto = data.completo;
+                            texto = data.edificio;
                         }
                         if (data.url == '') {
                             return texto;
@@ -158,101 +149,6 @@
                 }
             ];
             $('#oficinas_datatable').DataTable(configDataTable);
-        </script>
-    {% endif %}
-    {% if current_user.can_view('REPSVM AGRESORES') %}
-        <script>
-            configDataTable['ajax']['url'] = '/repsvm_agresores/datatable_json';
-            configDataTable['ajax']['data'] = { 'estatus': "A", 'distrito_id': {{ distrito.id}} };
-            configDataTable['columns'] = [
-                { data: "detalle" },
-                { data: "consecutivo" },
-                { data: "materia_tipo_juzgado" },
-                { data: "repsvm_delito_especifico" },
-                { data: "repsvm_tipo_sentencia" },
-                { data: "nombre" },
-                { data: "numero_causa" },
-                { data: "pena_impuesta" },
-                { data: "sentencia_url" }
-            ];
-            configDataTable['columnDefs'] = [
-                {
-                    targets: 0, // detalle
-                    data: null,
-                    render: function(data, type, row, meta) {
-                        return '<a href="' + data.url + '">' + data.id + '</a>';
-                    }
-                },
-                {
-                    targets: 2, // materia_tipo_juzgado
-                    data: null,
-                    render: function(data, type, row, meta) {
-                        if (data.url != '') {
-                            return '<a href="' + data.url + '">' + data.clave + '</a>';
-                        }
-                        return data.clave;
-                    }
-                },
-                {
-                    targets: 3, // repsvm_delito_especifico
-                    data: null,
-                    render: function(data, type, row, meta) {
-                        if (data.descripcion.length > 16)
-                            texto = '<span title="' + data.descripcion + '">' + data.descripcion.substr(0, 16) + '…' + '</span>';
-                        else
-                            texto = data.descripcion;
-                        if (data.url != '') {
-                            return '<a href="' + data.url + '">' + texto + '</a>';
-                        }
-                        return texto;
-                    }
-                },
-                {
-                    targets: 4, // repsvm_tipo_sentencia
-                    data: null,
-                    render: function(data, type, row, meta) {
-                        if (data.nombre.length > 16)
-                            texto = '<span title="' + data.nombre + '">' + data.nombre.substr(0, 16) + '…' + '</span>';
-                        else
-                            texto = data.nombre;
-                        if (data.url != '') {
-                            return '<a href="' + data.url + '">' + texto + '</a>';
-                        }
-                        return texto;
-                    }
-                },
-                {
-                    targets: 5, // nombre
-                    data: null,
-                    render: function(data, type, row, meta) {
-                        if (data.length > 48)
-                            return '<span title="' + data + '">' + data.substr(0, 48) + '…' + '</span>';
-                        else
-                            return data;
-                    }
-                },
-                {
-                    targets: [6, 7], // numero_causa, pena_impuesta
-                    data: null,
-                    render: function(data, type, row, meta) {
-                        if (data.length > 16)
-                            return '<span title="' + data + '">' + data.substr(0, 16) + '…' + '</span>';
-                        else
-                            return data;
-                    }
-                },
-                {
-                    targets: 8, // sentencia_url
-                    data: null,
-                    render: function(data, type, row, meta) {
-                        if (data != '') {
-                            return '<a href="' + data + '" target="_blank"><span class="iconify" data-icon="mdi:file-download"></span></a>';
-                        }
-                        return '';
-                    }
-                }
-            ];
-            $('#repsvm_agresores_datatable').DataTable(configDataTable);
         </script>
     {% endif %}
     {{ detail.moment_js(moment) }}

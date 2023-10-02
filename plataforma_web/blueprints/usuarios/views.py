@@ -5,6 +5,7 @@ import json
 import os
 import re
 from datetime import datetime, timedelta
+from sqlalchemy import or_
 
 import google.auth.transport.requests
 import google.oauth2.id_token
@@ -120,7 +121,7 @@ def profile():
     """Mostrar el Perfil"""
     ahora_utc = datetime.now(timezone("UTC"))
     ahora_mx_coah = ahora_utc.astimezone(timezone("America/Mexico_City"))
-    formato_fecha = "%Y-%m-%d"
+    formato_fecha = "%Y-%m-%d %H:%M %p"
     return render_template(
         "usuarios/profile.jinja2",
         ahora_utc_str=ahora_utc.strftime(formato_fecha),
@@ -221,6 +222,10 @@ def datatable_json():
         consulta = consulta.filter(Usuario.apellido_paterno.contains(safe_string(request.form["apellido_paterno"])))
     if "apellido_materno" in request.form:
         consulta = consulta.filter(Usuario.apellido_materno.contains(safe_string(request.form["apellido_materno"])))
+    if "nombre_completo" in request.form:
+        palabras = safe_string(request.form["nombre_completo"]).split(" ")
+        for palabra in palabras:
+            consulta = consulta.filter(or_(Usuario.nombres.contains(palabra), Usuario.apellido_paterno.contains(palabra), Usuario.apellido_materno.contains(palabra)))
     if "curp" in request.form:
         consulta = consulta.filter(Usuario.curp.contains(safe_string(request.form["curp"])))
     if "puesto" in request.form:
@@ -257,6 +262,25 @@ def datatable_json():
     return output_datatable_json(draw, total, data)
 
 
+@usuarios.route("/usuarios/list_usuarios_json/", methods=["POST"])
+def list_usuarios_json():
+    """Listado de Usuarios"""
+
+    # Consultar
+    consulta = Usuario.query
+    if "searchString" in request.form:
+        busqueda = safe_string(request.form["searchString"])
+        consulta = consulta.filter(or_(Usuario.nombres.contains(busqueda), Usuario.apellido_paterno.contains(busqueda), Usuario.apellido_materno.contains(busqueda)))
+        consulta = consulta.order_by(Usuario.apellido_paterno).limit(15).all()
+
+    # Elaborar datos para el Select2
+    results = []
+    for usuario in consulta:
+        results.append({"id": usuario.id, "text": usuario.nombre})
+
+    return {"results": results, "pagination": {"more": False}}
+
+
 @usuarios.route("/usuarios/<int:usuario_id>")
 @login_required
 @permission_required(MODULO, Permiso.VER)
@@ -288,11 +312,11 @@ def new():
             usuario = Usuario(
                 autoridad=autoridad,
                 oficina=form.oficina.data,
-                nombres=safe_string(form.nombres.data, do_unidecode=False),
-                apellido_paterno=safe_string(form.apellido_paterno.data, do_unidecode=False),
-                apellido_materno=safe_string(form.apellido_materno.data, do_unidecode=False),
+                nombres=safe_string(form.nombres.data, save_enie=True),
+                apellido_paterno=safe_string(form.apellido_paterno.data, save_enie=True),
+                apellido_materno=safe_string(form.apellido_materno.data, save_enie=True),
                 curp=safe_string(form.curp.data),
-                puesto=safe_string(form.puesto.data, do_unidecode=False),
+                puesto=safe_string(form.puesto.data, save_enie=True),
                 email=email,
                 workspace=form.workspace.data,
                 efirma_registro_id=form.efirma_registro_id.data,
@@ -323,11 +347,11 @@ def edit(usuario_id):
     usuario = Usuario.query.get_or_404(usuario_id)
     form = UsuarioEditForm()
     if form.validate_on_submit():
-        usuario.nombres = safe_string(form.nombres.data)
-        usuario.apellido_paterno = safe_string(form.apellido_paterno.data)
-        usuario.apellido_materno = safe_string(form.apellido_materno.data)
+        usuario.nombres = safe_string(form.nombres.data, save_enie=True)
+        usuario.apellido_paterno = safe_string(form.apellido_paterno.data, save_enie=True)
+        usuario.apellido_materno = safe_string(form.apellido_materno.data, save_enie=True)
         usuario.curp = safe_string(form.curp.data)
-        usuario.puesto = safe_string(form.puesto.data)
+        usuario.puesto = safe_string(form.puesto.data, save_enie=True)
         usuario.oficina = form.oficina.data
         usuario.efirma_registro_id = form.efirma_registro_id.data
         usuario.save()
@@ -373,11 +397,11 @@ def edit_admin(usuario_id):
         # Si es valido actualizar
         if es_valido:
             usuario.autoridad = Autoridad.query.get_or_404(form.autoridad.data)
-            usuario.nombres = safe_string(form.nombres.data, do_unidecode=False)
-            usuario.apellido_paterno = safe_string(form.apellido_paterno.data, do_unidecode=False)
-            usuario.apellido_materno = safe_string(form.apellido_materno.data, do_unidecode=False)
+            usuario.nombres = safe_string(form.nombres.data, save_enie=True)
+            usuario.apellido_paterno = safe_string(form.apellido_paterno.data, save_enie=True)
+            usuario.apellido_materno = safe_string(form.apellido_materno.data, save_enie=True)
             usuario.curp = safe_string(form.curp.data)
-            usuario.puesto = safe_string(form.puesto.data, do_unidecode=False)
+            usuario.puesto = safe_string(form.puesto.data, save_enie=True)
             usuario.email = email
             usuario.workspace = safe_string(form.workspace.data)
             usuario.efirma_registro_id = form.efirma_registro_id.data

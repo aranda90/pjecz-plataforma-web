@@ -6,10 +6,13 @@
 
 {% block topbar_actions %}
     {% call topbar.page_buttons(titulo) %}
-        {% if current_user.can_edit('AUTORIDADES') %}
+        {% if current_user.can_view('AUTORIDADES') %}
             {{ topbar.button('Autoridades', url_for('autoridades.list_active'), 'mdi:scale-balance') }}
         {% endif %}
-        {% if current_user.can_edit('DISTRITOS') %}
+        {% if current_user.can_view('MATERIAS') %}
+            {{ topbar.button('Materias', url_for('materias.list_active'), 'mdi:tag') }}
+        {% endif %}
+        {% if current_user.can_admin('DISTRITOS') %}
             {% if estatus == 'A' %}{{ topbar.button_list_inactive('Inactivos', url_for('distritos.list_inactive')) }}{% endif %}
             {% if estatus == 'B' %}{{ topbar.button_list_active('Activos', url_for('distritos.list_active')) }}{% endif %}
         {% endif %}
@@ -24,9 +27,12 @@
         <table id="distritos_datatable" class="table {% if estatus == 'B'%}table-dark{% endif %} display nowrap" style="width:100%">
             <thead>
                 <tr>
+                    <th>Clave</th>
                     <th>Nombre</th>
                     <th>Nombre corto</th>
-                    <th>Es Distrito Judicial</th>
+                    <th>Es D.J.</th>
+                    <th>Es D.</th>
+                    <th>Es J.</th>
                 </tr>
             </thead>
         </table>
@@ -40,19 +46,22 @@
         configDataTable['ajax']['data'] = {{ filtros }};
         configDataTable['columns'] = [
             { data: 'detalle' },
+            { data: 'nombre' },
             { data: 'nombre_corto' },
-            { data: 'es_distrito_judicial' }
+            { data: 'es_distrito_judicial' },
+            { data: 'es_distrito' },
+            { data: 'es_jurisdiccional' },
         ];
         configDataTable['columnDefs'] = [
             {
                 targets: 0, // detalle
                 data: null,
                 render: function(data, type, row, meta) {
-                    return '<a href="' + data.url + '">' + data.nombre + '</a>';
+                    return '<a href="' + data.url + '">' + data.clave + '</a>';
                 }
             },
             {
-                targets: 2, // es_distrito_judicial
+                targets: [3,4,5], // es_distrito_judicial, es_distrito, es_jurisdiccional
                 data: null,
                 render: function(data, type, row, meta) {
                     if (data) { return 'Si'; } else { return ''; }

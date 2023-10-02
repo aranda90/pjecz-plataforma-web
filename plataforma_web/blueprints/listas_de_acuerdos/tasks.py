@@ -43,8 +43,6 @@ db.app = app
 
 locale.setlocale(locale.LC_TIME, "es_MX.utf8")
 
-SUBDIRECTORIO = "Listas de Acuerdos"
-
 
 def refrescar(autoridad_id: int, usuario_id: int = None):
     """Rastrear las listas de acuerdos para agregar las que no tiene y dar de baja las que no existen en la BD"""
@@ -78,15 +76,15 @@ def refrescar(autoridad_id: int, usuario_id: int = None):
     bitacora.info("- Tiene %d registros en la base de datos", total_en_bd)
 
     # Obtener el nombre del deposito
-    deposito = os.getenv("CLOUD_STORAGE_DEPOSITO", "")
+    deposito = os.getenv("CLOUD_STORAGE_DEPOSITO_LISTAS_DE_ACUERDOS", "")
     if deposito == "":
-        mensaje = "Falta la variable de entorno CLOUD_STORAGE_DEPOSITO"
+        mensaje = "Falta la variable de entorno CLOUD_STORAGE_DEPOSITO_LISTAS_DE_ACUERDOS"
         bitacora.error(mensaje)
         return set_task_error(mensaje)
 
     # Obtener archivos en el depósito
     bucket = storage.Client().get_bucket(deposito)
-    subdirectorio = f"{SUBDIRECTORIO}/{autoridad.directorio_listas_de_acuerdos}"
+    subdirectorio = autoridad.directorio_listas_de_acuerdos
     blobs = list(bucket.list_blobs(prefix=subdirectorio))
     total_en_deposito = len(blobs)
     if total_en_deposito == 0:

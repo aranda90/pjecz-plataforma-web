@@ -10,6 +10,8 @@ from pathlib import Path
 import csv
 import click
 
+from lib.safe_string import extract_expediente_anio, extract_expediente_num
+
 from plataforma_web.app import create_app
 from plataforma_web.extensions import db
 
@@ -42,8 +44,8 @@ def refrescar(autoridad_clave):
     if autoridad is None:
         click.echo(f"No existe la clave {autoridad_clave} en autoridades")
         return
-    if not autoridad.distrito.es_distrito_judicial:
-        click.echo(f"La autoridad {autoridad_clave} no está en un distrito judicial")
+    if autoridad.estatus != "A":
+        click.echo(f"La autoridad {autoridad_clave} no está activa")
         return
     if not autoridad.es_jurisdiccional:
         click.echo(f"La autoridad {autoridad_clave} no es jurisdiccional")
@@ -156,7 +158,34 @@ def respaldar(autoridad_id, autoridad_clave, desde, output):
     click.echo(f"Respaldados {contador} sentencias en {ruta.name}")
 
 
+@click.command()
+def actualizar_expedientes_anios_nums():
+    """Actualizar el anio y el numero de los expedientes"""
+    click.echo("Actualizar el anio y el numero de los expedientes")
+    database = db.session
+    contador = 0
+    sentencias = Sentencia.query.filter_by(estatus="A")
+    for sentencia in sentencias:
+        if sentencia.expediente_anio is None or sentencia.expediente_num is None:
+            anio = extract_expediente_anio(sentencia.expediente)
+            if anio != 0:
+                sentencia.expediente_anio = anio
+            num = extract_expediente_num(sentencia.expediente)
+            if num != 0:
+                sentencia.expediente_num = num
+            if anio != 0 and num != 0:
+                database.add(sentencia)
+            contador += 1
+            if contador % 100 == 0:
+                database.commit()
+                click.echo(f"  Van {contador}...")
+    if contador > 0 and contador % 100 != 0:
+        database.commit()
+    click.echo(f"Actualizados {contador} sentencias")
+
+
 cli.add_command(enviar_reporte)
 cli.add_command(refrescar)
 cli.add_command(refrescar_todos)
 cli.add_command(respaldar)
+cli.add_command(actualizar_expedientes_anios_nums)

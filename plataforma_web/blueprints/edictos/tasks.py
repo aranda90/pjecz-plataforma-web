@@ -29,8 +29,6 @@ bitacora.addHandler(empunadura)
 app = create_app()
 app.app_context().push()
 
-SUBDIRECTORIO = "Edictos"
-
 
 def set_task_progress(progress: int, mensaje: str = None):
     """Cambiar el progreso de la tarea"""
@@ -95,9 +93,9 @@ def refrescar(autoridad_id: int, usuario_id: int = None):
     bitacora.info("- Tiene %d registros en la base de datos", total_en_bd)
 
     # Obtener archivos en el depósito
-    deposito = os.environ.get("CLOUD_STORAGE_DEPOSITO", "pjecz-pruebas")
+    deposito = os.environ.get("CLOUD_STORAGE_DEPOSITO_EDICTOS", "pjecz-pruebas")
     bucket = storage.Client().get_bucket(deposito)
-    subdirectorio = f"{SUBDIRECTORIO}/{autoridad.directorio_edictos}"
+    subdirectorio = autoridad.directorio_edictos
     blobs = list(bucket.list_blobs(prefix=subdirectorio))
     total_en_deposito = len(blobs)
     if total_en_deposito == 0:

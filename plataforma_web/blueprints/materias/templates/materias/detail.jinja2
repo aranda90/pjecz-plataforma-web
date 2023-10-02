@@ -22,10 +22,12 @@
             <table id="autoridades_datatable" class="table display nowrap" style="width:100%">
                 <thead>
                     <tr>
-                        <th>Claves</th>
-                        <th>Descripciones cortas</th>
-                        <th>Órganos Jurisdiccionales</th>
-                        <th>Distritos</th>
+                        <th>Clave</th>
+                        <th>Descripción corta</th>
+                        <th>Órgano Jurisdiccional</th>
+                        <th>Distrito</th>
+                        <th>Sede</th>
+                        <th>Extinto</th>
                     </tr>
                 </thead>
             </table>
@@ -37,17 +39,6 @@
                 <thead>
                     <tr>
                         <th>Tipos de Juicios</th>
-                    </tr>
-                </thead>
-            </table>
-        {% endcall %}
-    {% endif %}
-    {% if current_user.can_view('MATERIAS TIPOS JUZGADOS') %}
-        {% call detail.card(title='Tipos de Juzgados') %}
-            <table id="materias_tipos_juzgados_datatable" class="table display nowrap" style="width:100%">
-                <thead>
-                    <tr>
-                        <th>Tipos de Jugzados</th>
                     </tr>
                 </thead>
             </table>
@@ -69,7 +60,9 @@
                 { data: "detalle" },
                 { data: "descripcion_corta" },
                 { data: "organo_jurisdiccional" },
-                { data: "distrito" }
+                { data: "distrito" },
+                { data: "sede" },
+                { data: "es_extinto" }
             ];
             configDataTable['columnDefs'] = [
                 {
@@ -90,6 +83,11 @@
                     }
                 }
             ];
+            configDataTable['rowCallback'] = function (row, data) {
+                if (data.es_extinto == 'EXTINTO') {
+                    $(row).css("background-color", "#c0c0c0");
+                }
+            };
             $('#autoridades_datatable').DataTable(configDataTable);
         </script>
     {% endif %}
@@ -110,25 +108,6 @@
                 }
             ];
             $('#materias_tipos_juicios_datatable').DataTable(configDataTable);
-        </script>
-    {% endif %}
-    {% if current_user.can_view('MATERIAS TIPOS JUZGADOS') %}
-        <script>
-            configDataTable['ajax']['url'] = '/materias_tipos_juzgados/datatable_json';
-            configDataTable['ajax']['data'] = { 'estatus': "A", 'materia_id': {{ materia.id}} };
-            configDataTable['columns'] = [
-                { data: "detalle" }
-            ];
-            configDataTable['columnDefs'] = [
-                {
-                    targets: 0, // detalle
-                    data: null,
-                    render: function(data, type, row, meta) {
-                        return '<a href="' + data.url + '">' + data.descripcion + '</a>';
-                    }
-                }
-            ];
-            $('#materias_tipos_juzgados_datatable').DataTable(configDataTable);
         </script>
     {% endif %}
 {% endblock %}

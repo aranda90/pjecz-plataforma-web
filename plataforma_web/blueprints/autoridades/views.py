@@ -4,9 +4,9 @@ Autoridades, vistas
 import json
 from datetime import date, datetime, timedelta
 
-import pytz
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
+import pytz
 
 from lib.datatables import get_datatable_parameters, output_datatable_json
 from lib.safe_string import safe_clave, safe_string, safe_message
@@ -15,6 +15,7 @@ from plataforma_web.blueprints.audiencias.models import Audiencia
 from plataforma_web.blueprints.autoridades.models import Autoridad
 from plataforma_web.blueprints.autoridades.forms import AutoridadEditForm, AutoridadNewForm, AutoridadSearchForm
 from plataforma_web.blueprints.bitacoras.models import Bitacora
+from plataforma_web.blueprints.distritos.models import Distrito
 from plataforma_web.blueprints.edictos.models import Edicto
 from plataforma_web.blueprints.materias.models import Materia
 from plataforma_web.blueprints.modulos.models import Modulo
@@ -66,6 +67,21 @@ def datatable_json():
         consulta = consulta.filter(Autoridad.descripcion.contains(safe_string(request.form["descripcion"], to_uppercase=False)))
     if "organo_jurisdiccional" in request.form:
         consulta = consulta.filter(Autoridad.organo_jurisdiccional == safe_string(request.form["organo_jurisdiccional"]))
+    if "caracteristicas" in request.form:
+        if request.form["caracteristicas"] == "CEMASC":
+            consulta = consulta.filter_by(es_cemasc=True)
+        elif request.form["caracteristicas"] == "DEFENSORIA":
+            consulta = consulta.filter_by(es_defensoria=True)
+        elif request.form["caracteristicas"] == "EXTINTO":
+            consulta = consulta.filter_by(es_extinto=True)
+        elif request.form["caracteristicas"] == "JURISDICCIONAL":
+            consulta = consulta.filter_by(es_jurisdiccional=True)
+        elif request.form["caracteristicas"] == "NOTARIA":
+            consulta = consulta.filter_by(es_notaria=True)
+        elif request.form["caracteristicas"] == "ORGANO_ESPECIALIZADO":
+            consulta = consulta.filter_by(es_organo_especializado=True)
+        elif request.form["caracteristicas"] == "REVISOR_ESCRITURAS":
+            consulta = consulta.filter_by(es_revisor_escrituras=True)
     registros = consulta.order_by(Autoridad.clave).offset(start).limit(rows_per_page).all()
     total = consulta.count()
     # Elaborar datos para DataTable
@@ -86,7 +102,9 @@ def datatable_json():
                 "materia": {
                     "nombre": resultado.materia.nombre,
                     "url": url_for("materias.detail", materia_id=resultado.materia_id) if current_user.can_view("MATERIAS") else "",
-                }
+                },
+                "sede": resultado.sede,
+                "es_extinto": "EXTINTO" if resultado.es_extinto else "",
             }
         )
     # Entregar JSON
@@ -101,6 +119,7 @@ def list_active():
         filtros=json.dumps({"estatus": "A"}),
         titulo="Autoridades",
         estatus="A",
+        distritos=Distrito.query.filter_by(estatus="A").order_by(Distrito.clave).all(),
     )
 
 
@@ -113,38 +132,8 @@ def list_inactive():
         filtros=json.dumps({"estatus": "B"}),
         titulo="Autoridades inactivos",
         estatus="B",
+        distritos=Distrito.query.filter_by(estatus="A").order_by(Distrito.clave).all(),
     )
-
-
-@autoridades.route("/autoridades/buscar", methods=["GET", "POST"])
-def search():
-    """Buscar Autoridad"""
-    form_search = AutoridadSearchForm()
-    if form_search.validate_on_submit():
-        busqueda = {"estatus": "A"}
-        titulos = []
-        if form_search.descripcion.data:
-            descripcion = safe_string(form_search.descripcion.data, to_uppercase=False)
-            if descripcion != "":
-                busqueda["descripcion"] = descripcion
-                titulos.append("descripción " + descripcion)
-        if form_search.clave.data:
-            clave = safe_string(form_search.clave.data)
-            if clave != "":
-                busqueda["clave"] = clave
-                titulos.append("clave " + clave)
-        if form_search.organo_jurisdiccional.data:
-            organo_jurisdiccional = safe_string(form_search.organo_jurisdiccional.data)
-            if organo_jurisdiccional != "":
-                busqueda["organo_jurisdiccional"] = organo_jurisdiccional
-                titulos.append("órgano jurisdiccional " + organo_jurisdiccional)
-        return render_template(
-            "autoridades/list.jinja2",
-            filtros=json.dumps(busqueda),
-            titulo="Autoridad con " + ", ".join(titulos),
-            estatus="A",
-        )
-    return render_template("autoridades/search.jinja2", form=form_search)
 
 
 @autoridades.route("/autoridades/<int:autoridad_id>")
@@ -315,9 +304,10 @@ def new():
             flash("La clave ya está en uso. Debe de ser única.", "warning")
         else:
             distrito = form.distrito.data
-            descripcion = form.descripcion.data.strip()
+            descripcion = safe_string(form.descripcion.data, save_enie=True)
             es_jurisdiccional = form.es_jurisdiccional.data
             es_notaria = form.es_notaria.data
+            es_revisor_escrituras = form.es_revisor_escrituras.data
             directorio = f"{distrito.nombre}/{descripcion}"
             directorio_listas_de_acuerdos = ""
             directorio_sentencias = ""
@@ -334,11 +324,18 @@ def new():
                 directorio_edictos = directorio
             autoridad = Autoridad(
                 distrito=distrito,
-                descripcion=descripcion,
-                descripcion_corta=form.descripcion_corta.data.strip(),
+                descripcion=safe_string(descripcion, save_enie=True),
+                descripcion_corta=safe_string(form.descripcion_corta.data, save_enie=True),
                 clave=clave,
+                sede=safe_string(form.sede.data),
+                es_archivo_solicitante=form.es_archivo_solicitante.data,
+                es_cemasc=form.es_cemasc.data,
+                es_defensoria=form.es_defensoria.data,
+                es_extinto=False,
                 es_jurisdiccional=es_jurisdiccional,
                 es_notaria=es_notaria,
+                es_organo_especializado=form.es_organo_especializado.data,
+                es_revisor_escrituras=es_revisor_escrituras,
                 organo_jurisdiccional=form.organo_jurisdiccional.data,
                 materia=form.materia.data,
                 audiencia_categoria=form.audiencia_categoria.data,
@@ -380,11 +377,18 @@ def edit(autoridad_id):
         # Si es valido actualizar
         if es_valido:
             autoridad.distrito = form.distrito.data
-            autoridad.descripcion = form.descripcion.data.strip()
-            autoridad.descripcion_corta = form.descripcion_corta.data.strip()
+            autoridad.descripcion = safe_string(form.descripcion.data, save_enie=True)
+            autoridad.descripcion_corta = safe_string(form.descripcion_corta.data, save_enie=True)
             autoridad.clave = clave
+            autoridad.sede = safe_string(form.sede.data)
+            autoridad.es_archivo_solicitante = form.es_archivo_solicitante.data
+            autoridad.es_cemasc = form.es_cemasc.data
+            autoridad.es_defensoria = form.es_defensoria.data
+            autoridad.es_extinto = form.es_extinto.data
             autoridad.es_jurisdiccional = form.es_jurisdiccional.data
             autoridad.es_notaria = form.es_notaria.data
+            autoridad.es_organo_especializado = form.es_organo_especializado.data
+            autoridad.es_revisor_escrituras = form.es_revisor_escrituras.data
             autoridad.organo_jurisdiccional = form.organo_jurisdiccional.data
             autoridad.materia = form.materia.data
             autoridad.audiencia_categoria = form.audiencia_categoria.data
@@ -393,6 +397,7 @@ def edit(autoridad_id):
             autoridad.directorio_edictos = form.directorio_edictos.data.strip()
             autoridad.directorio_glosas = form.directorio_glosas.data.strip()
             autoridad.limite_dias_listas_de_acuerdos = form.limite_dias_listas_de_acuerdos.data
+            autoridad.datawarehouse_id = form.datawarehouse_id.data
             autoridad.save()
             bitacora = Bitacora(
                 modulo=Modulo.query.filter_by(nombre=MODULO).first(),
@@ -407,8 +412,15 @@ def edit(autoridad_id):
     form.descripcion.data = autoridad.descripcion
     form.descripcion_corta.data = autoridad.descripcion_corta
     form.clave.data = autoridad.clave
+    form.sede.data = autoridad.sede
+    form.es_archivo_solicitante.data = autoridad.es_archivo_solicitante
+    form.es_cemasc.data = autoridad.es_cemasc
+    form.es_defensoria.data = autoridad.es_defensoria
+    form.es_extinto.data = autoridad.es_extinto
     form.es_jurisdiccional.data = autoridad.es_jurisdiccional
     form.es_notaria.data = autoridad.es_notaria
+    form.es_organo_especializado.data = autoridad.es_organo_especializado
+    form.es_revisor_escrituras.data = autoridad.es_revisor_escrituras
     form.organo_jurisdiccional.data = autoridad.organo_jurisdiccional
     form.materia.data = autoridad.materia
     form.audiencia_categoria.data = autoridad.audiencia_categoria
@@ -417,11 +429,12 @@ def edit(autoridad_id):
     form.directorio_edictos.data = autoridad.directorio_edictos
     form.directorio_glosas.data = autoridad.directorio_glosas
     form.limite_dias_listas_de_acuerdos.data = autoridad.limite_dias_listas_de_acuerdos
+    form.datawarehouse_id.data = autoridad.datawarehouse_id
     return render_template("autoridades/edit.jinja2", form=form, autoridad=autoridad)
 
 
 @autoridades.route("/autoridades/eliminar/<int:autoridad_id>")
-@permission_required(MODULO, Permiso.MODIFICAR)
+@permission_required(MODULO, Permiso.ADMINISTRAR)
 def delete(autoridad_id):
     """Eliminar Autoridad"""
     autoridad = Autoridad.query.get_or_404(autoridad_id)
@@ -440,7 +453,7 @@ def delete(autoridad_id):
 
 
 @autoridades.route("/autoridades/recuperar/<int:autoridad_id>")
-@permission_required(MODULO, Permiso.MODIFICAR)
+@permission_required(MODULO, Permiso.ADMINISTRAR)
 def recover(autoridad_id):
     """Recuperar Autoridad"""
     autoridad = Autoridad.query.get_or_404(autoridad_id)
@@ -456,3 +469,59 @@ def recover(autoridad_id):
         flash(bitacora.descripcion, "success")
         return redirect(bitacora.url)
     return redirect(url_for("autoridades.detail", autoridad_id=autoridad.id))
+
+
+@autoridades.route("/autoridades/notarias_json", methods=["POST"])
+def query_notarias_json():
+    """Proporcionar el JSON de autoridades para elegir Notarías con un Select2"""
+    consulta = Autoridad.query.filter(Autoridad.estatus == "A").filter_by(es_notaria=True, es_jurisdiccional=True)
+    if "searchString" in request.form:
+        consulta = consulta.filter(Autoridad.descripcion.contains(request.form["searchString"]))
+    results = []
+    for autoridad in consulta.order_by(Autoridad.id).limit(15).all():
+        results.append({"id": autoridad.id, "text": autoridad.distrito.nombre_corto + "  :  " + autoridad.descripcion, "nombre": autoridad.distrito.nombre + " : " + autoridad.descripcion})
+    return {"results": results, "pagination": {"more": False}}
+
+
+@autoridades.route("/autoridades/juzgados_json", methods=["POST"])
+def query_juzgados_json():
+    """Proporcionar el JSON de autoridades para elegir Juzgados con un Select2"""
+    consulta = Autoridad.query.filter(Autoridad.estatus == "A")
+    if "es_archivo_solicitante" in request.form:
+        consulta = consulta.filter_by(es_archivo_solicitante=request.form["es_archivo_solicitante"] == "true")
+    if "es_extinto" in request.form:
+        consulta = consulta.filter_by(es_extinto=request.form["es_extinto"] == "true")
+    if "es_jurisdiccional" in request.form:
+        consulta = consulta.filter_by(es_jurisdiccional=request.form["es_jurisdiccional"] == "true")
+        # Solo Juzgados de Primera Instancia
+        consulta = consulta.filter(Autoridad.organo_jurisdiccional.between("JUZGADO DE PRIMERA INSTANCIA", "JUZGADO DE PRIMERA INSTANCIA ORAL"))
+    if "clave" in request.form:
+        texto = safe_string(request.form["clave"]).upper()
+        consulta = consulta.filter(Autoridad.clave.contains(texto))
+    results = []
+    for autoridad in consulta.order_by(Autoridad.id).limit(15).all():
+        results.append(
+            {
+                "id": autoridad.id,
+                "text": autoridad.clave + "  : " + autoridad.descripcion_corta,
+            }
+        )
+    return {"results": results, "pagination": {"more": False}}
+
+
+@autoridades.route("/autoridades/es_revisor_escrituras_json", methods=["POST"])
+def query_es_revisor_escrituras_json():
+    """Proporcionar el JSON de autoridades para elegir un juzgado si esta seleccionado la opción es_revisor_escrituras con un Select2"""
+    consulta = Autoridad.query.filter(Autoridad.estatus == "A").filter_by(es_revisor_escrituras=True, es_jurisdiccional=True)
+    if "searchString" in request.form:
+        consulta = consulta.filter(Autoridad.descripcion.contains(request.form["searchString"]))
+    results = []
+    for autoridad in consulta.order_by(Autoridad.id).limit(20).all():
+        results.append(
+            {
+                "id": autoridad.id,
+                "text": autoridad.distrito.nombre_corto + "  :  " + autoridad.descripcion,
+                "nombre": autoridad.distrito.nombre + " : " + autoridad.descripcion,
+            }
+        )
+    return {"results": results, "pagination": {"more": False}}

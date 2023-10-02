@@ -2,15 +2,11 @@
 
 Administrador de contenidos del sitio web del PJECZ.
 
-## Entorno Virtual con Python 3.6 o superior
+## Entorno Virtual con Python 3.8
 
 Crear el entorno virtual dentro de la copia local del repositorio, con
 
-    python -m venv venv
-
-O con virtualenv
-
-    virtualenv -p python3 venv
+    python3.8 -m venv venv
 
 Active el entorno virtual, en Linux con...
 
@@ -36,84 +32,172 @@ Verifique con
 
     pip list
 
+Instalar el Comando Cli
+
+    pip install --editable .
+
 ## Configurar
 
-Debe crear un archivo instance/settings.py que defina su configuración para desarrollo...
+Debe crear un archivo `instance/settings.py` que defina su conexion a la base de datos...
 
-    # Flask
-    SECRET_KEY = 'xxxxxxxxxxxxxxxxxxxxxxx'
+    """
+    Configuracion para desarrollo
+    """
+    import os
 
-    # Base de datos en SQLLite
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///pjecz_plataforma_web.sqlite3'
-
-    # Base de datos MariaDB
-    # SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://wronguser:badpassword@127.0.0.1/pjecz_plataforma_web'
-
-O bien, puede guardar valores en un archivo .env como variables de entorno...
-
-    # Flask
-    FLASK_APP=plataforma_web.app
-    FLASK_DEBUG=1
-    SECRET_KEY=****************
 
     # Base de datos
-    DB_USER=pjeczadmin
-    DB_PASS=********
-    DB_NAME=pjecz_plataforma_web
-    DB_HOST=127.0.0.1
-
-Y los obtiene en instance/settings.py con...
-
-    import os
     DB_USER = os.environ.get("DB_USER", "wronguser")
     DB_PASS = os.environ.get("DB_PASS", "badpassword")
     DB_NAME = os.environ.get("DB_NAME", "pjecz_plataforma_web")
     DB_HOST = os.environ.get("DB_HOST", "127.0.0.1")
-    SQLALCHEMY_DATABASE_URI = f"mysql+pymysql://{DB_USER}:{DB_PASS}@{DB_HOST}/{DB_NAME}"
+    DB_PORT = os.environ.get("DB_PORT", "5432")
 
-## Cargar registros iniciales
+    # PostgreSQL
+    SQLALCHEMY_DATABASE_URI = f"postgresql+psycopg2://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
-Crear directorio seed
+Guarde sus configuraciones, contrasenas y tokens en un archivo `.env`
 
-    mkdir seed
+    # Flask, para SECRET_KEY use openssl rand -hex 24
+    FLASK_APP=plataforma_web.app
+    FLASK_DEBUG=1
+    SECRET_KEY=XXXXXXXXXXXXXXXX
 
-Copie los archivos CSV en seed.
+    # Base de datos
+    DB_HOST=127.0.0.1
+    DB_PORT=8432
+    DB_NAME=pjecz_plataforma_web
+    DB_USER=adminpjeczplataformaweb
+    DB_PASS=XXXXXXXXXXXXXXXX
 
-Instale el comando click con
+    # Redis
+    REDIS_URL=redis://127.0.0.1
+    TASK_QUEUE=pjecz_plataforma_web
 
-    pip install --editable .
+    # Google Cloud Storage
+    CLOUD_STORAGE_DEPOSITO=
+    CLOUD_STORAGE_DEPOSITO_EDICTOS=
+    CLOUD_STORAGE_DEPOSITO_GLOSAS=
+    CLOUD_STORAGE_DEPOSITO_LISTAS_DE_ACUERDOS=
+    CLOUD_STORAGE_DEPOSITO_SENTENCIAS=
 
-Y ejecute la inicialización y alimentación
+    # Host
+    HOST=
 
-    plataforma_web db inicializar
-    plataforma_web db alimentar
+    # Salt sirve para cifrar el ID con HashID, debe ser igual en la API
+    SALT=XXXXXXXXXXXXXXXX
 
-En el futuro, use reiniciar que es inicializar y alimentar
+    # Sendgrid
+    SENDGRID_API_KEY=
+    SENDGRID_FROM_EMAIL=
+    SENDGRID_TO_EMAIL_REPORTES=
 
-    plataforma_web db reiniciar
+    # Financieros Vales
+    FIN_VALES_EFIRMA_SER_FIRMA_CADENA_URL=
+    FIN_VALES_EFIRMA_CAN_FIRMA_CADENA_URL=
+    FIN_VALES_EFIRMA_QR_URL=
+    FIN_VALES_EFIRMA_APP_ID=
+    FIN_VALES_EFIRMA_APP_PASS=
 
-## Arrancar el Flask
+    # RRHH Personal API OAuth2
+    RRHH_PERSONAL_API_URL=
+    RRHH_PERSONAL_API_USERNAME=
+    RRHH_PERSONAL_API_PASSWORD=
 
-En el entorno virtual cargue las variables de entorno
+    # Expediente Virtual API
+    EXPEDIENTE_VIRTUAL_API_URL=
+    EXPEDIENTE_VIRTUAL_API_KEY=
 
-Para la línea de comandos de windows...
+    # Pegaso API cosulta de SIBED
+    PEGASO_API_URL=
+    PEGASO_API_KEY=
 
-    set FLASK_APP=plataforma_web/app.py
-    set FLASK_DEBUG=1
+    # Si esta en PRODUCTION se evita reiniciar la base de datos
+    DEPLOYMENT_ENVIRONMENT=develop
 
-Para la power shell de windows...
+Cree el archivo `.bashrc` para que un perfil de Konsole le facilite la inicializacion
 
-    $env:FLASK_APP = "plataforma_web/app.py"
-    $env:FLASK_DEBUG = 1
+    # pjecz-plataforma-web
 
-Para la terminal GNU/Linux...
+    if [ -f ~/.bashrc ]
+    then
+        . ~/.bashrc
+    fi
 
-    export FLASK_APP=plataforma_web.app
-    export FLASK_DEBUG=1
+    if command -v figlet &> /dev/null
+    then
+        figlet PJECZ Plataforma Web
+    else
+        echo "== PJECZ Plataforma Web"
+    fi
+    echo
 
-Y ejecute Flask
+    if [ -f .env ]
+    then
+        echo "-- Variables de entorno"
+        export $(grep -v '^#' .env | xargs)
+        echo "   CLOUD_STORAGE_DEPOSITO: ${CLOUD_STORAGE_DEPOSITO}"
+        echo "   CLOUD_STORAGE_DEPOSITO_EDICTOS: ${CLOUD_STORAGE_DEPOSITO_EDICTOS}"
+        echo "   CLOUD_STORAGE_DEPOSITO_GLOSAS: ${CLOUD_STORAGE_DEPOSITO_GLOSAS}"
+        echo "   CLOUD_STORAGE_DEPOSITO_LISTAS_DE_ACUERDOS: ${CLOUD_STORAGE_DEPOSITO_LISTAS_DE_ACUERDOS}"
+        echo "   CLOUD_STORAGE_DEPOSITO_SENTENCIAS: ${CLOUD_STORAGE_DEPOSITO_SENTENCIAS}"
+        echo "   DEPLOYMENT_ENVIRONMENT: ${DEPLOYMENT_ENVIRONMENT}"
+        echo "   DB_HOST: ${DB_HOST}"
+        echo "   DB_PORT: ${DB_PORT}"
+        echo "   DB_NAME: ${DB_NAME}"
+        echo "   DB_USER: ${DB_USER}"
+        echo "   DB_PASS: ${DB_PASS}"
+        echo "   FLASK_APP: ${FLASK_APP}"
+        echo "   HOST: ${HOST}"
+        echo "   REDIS_URL: ${REDIS_URL}"
+        echo "   SALT: ${SALT}"
+        echo "   SECRET_KEY: ${SECRET_KEY}"
+        echo "   TASK_QUEUE: ${TASK_QUEUE}"
+        echo
+        echo "   API's Variables"
+        echo "   - Expediente Virtual API -"
+        echo "   EXPEDIENTE_VIRTUAL_API_URL: ${EXPEDIENTE_VIRTUAL_API_URL}"
+        echo "   EXPEDIENTE_VIRTUAL_API_KEY: ${EXPEDIENTE_VIRTUAL_API_KEY}"
+        echo "   - Pegaso API cosulta de SIBED -"
+        echo "   PEGASO_API_URL: ${PEGASO_API_URL}"
+        echo "   PEGASO_API_KEY: ${PEGASO_API_KEY}"
+        echo
+        export PGHOST=$DB_HOST
+        export PGPORT=$DB_PORT
+        export PGDATABASE=$DB_NAME
+        export PGUSER=$DB_USER
+        export PGPASSWORD=$DB_PASS
+    fi
 
-    flask run
+    if [ -d venv ]
+    then
+        echo "-- Python Virtual Environment"
+        source venv/bin/activate
+        echo "   $(python3 --version)"
+        export PYTHONPATH=$(pwd)
+        echo "   PYTHONPATH: ${PYTHONPATH}"
+        echo
+        echo "-- Ejecutar Flask o RQ Worker"
+        alias arrancar="flask run --host 0.0.0.0 --port=5003"
+        alias fondear="rq worker ${TASK_QUEUE}"
+        echo "   arrancar = flask run --host 0.0.0.0 --port=5003"
+        echo "   fondear = rq worker ${TASK_QUEUE}"
+        echo
+    fi
+
+    if [ -f app.yaml ]
+    then
+        echo "-- Subir a Google Cloud"
+        echo "   gcloud app deploy"
+        echo
+    fi
+
+## Arrancar Flask
+
+Abra una terminal, cargue el entorno virtual y arranque Flask
+
+    source .bashrc
+    arrancar
 
 ## Arrancar RQ worker
 
@@ -121,12 +205,7 @@ Las tareas en el fondo requieren un servicio Redis
 
 Abra una terminal, cargue el entorno virtual y deje en ejecución el worker
 
-    rq worker pjecz_plataforma_web
+    source .bashrc
+    fondear
 
 Estará vigilante de Redis
-
-## Crear archivos PDF con pdfkit
-
-Este paquete de python requiere que se instale wkhtmltopdf
-
-    sudo dnf install wkhtmltopdf

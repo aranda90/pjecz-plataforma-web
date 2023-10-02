@@ -1,0 +1,152 @@
+{% extends 'layouts/app.jinja2' %}
+{% import 'macros/form.jinja2' as f with context %}
+{% import 'macros/topbar.jinja2' as topbar %}
+
+{% block title %}Nuevo Expediente{% endblock %}
+
+{% block custom_head %}
+    <!-- Select2 bootstrap -->
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://storage.googleapis.com/pjecz-informatica/static/css/select2.css" rel="stylesheet" />
+{% endblock %}
+
+{% block topbar_actions %}
+    {{ topbar.page('Nuevo Expediente') }}
+{% endblock %}
+
+{% block content %}
+    {# Sección de búsqueda en Expendiente Virtual #}
+    <div class="card mb-3 border-info">
+        <div class="card-header bg-info text-light" style="font-weight: bold;">Búsqueda en Expendiente Virtual</div>
+        <div class="card-body" style="background-color: #cff4fc;">
+            <form class="row g-3" action="{{url_for('arc_documentos.search')}}" id="busqueda_form" method="POST" role="form">
+                <input id="csrf_token" name="csrf_token" type="hidden" value="{{ csrf_token() }}">
+                <div class="form-floating mb-3 col-12">
+                    <input type="text" class="form-control" id="num_expediente" name="num_expediente" value="{{num_expediente}}">
+                    <label for="num_expediente_sige" class="form-label">Núm. Expediente (núm/año):</label>
+                </div>
+                {% if mostrar_secciones["select_juzgado"] %}
+                    <div class="col-12 form-floating">
+                        <select class="form-control js-select2-filter" id="juzgadoInput_buscar" name="juzgadoInput_buscar" style="text-transform: uppercase">
+                        {% if mostrar_secciones["juzgado_id"] %}
+                            <option value="{{mostrar_secciones['juzgado_id']}}" selected>{{mostrar_secciones["juzgado_nombre"]}}</option>
+                        {% endif %}
+                        </select>
+                        <label for="juzgadoInput_buscar">Instancia</label>
+                    </div>
+                {% endif %}
+                <div class="col-2">
+                    <input class="btn btn-lg btn-primary" id="btn_buscar" name="btn_buscar" type="submit" value="Buscar">
+                </div>
+            </form>
+        </div>
+    </div>
+    {# Formulario para alta de documento #}
+    {% call f.card() %}
+        {% call f.form_tag('arc_documentos.new', fid='documento_form') %}
+            {% call f.form_group(form.expediente) %}{% endcall %}
+            {% call f.form_group(form.anio) %}{% endcall %}
+            {% if form.juzgado_readonly %}
+                {% call f.form_group(form.juzgado_readonly, readonly=true) %}{% endcall %}
+            {% else %}
+                {% call f.form_group(form.juzgado_id) %}{% endcall %}
+            {% endif %}
+            {% call f.form_group(form.actor) %}{% endcall %}
+            {% call f.form_group(form.demandado) %}{% endcall %}
+            {% call f.form_group(form.juicio) %}{% endcall %}
+            {% call f.form_group(form.tipo_juzgado) %}{% endcall %}
+            {% call f.form_group(form.juzgado_origen) %}{% endcall %}
+            {% call f.form_group(form.tipo) %}{% endcall %}
+            {% if form.ubicacion_readonly %}
+                {% call f.form_group(form.ubicacion_readonly, readonly=true) %}{% endcall %}
+            {% else %}
+                {% call f.form_group(form.ubicacion) %}{% endcall %}
+            {% endif %}
+            <hr>
+            {% call f.form_group(form.fojas) %}{% endcall %}
+            {% call f.form_group(form.notas) %}{% endcall %}
+            {% call f.form_group(form.crear) %}{% endcall %}
+        {% endcall %}
+    {% endcall %}
+{% endblock %}
+
+{% block custom_javascript %}
+    <!-- Select2 bootstrap -->
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script>
+        $(document).ready(function(){
+            $("#juzgadoInput_buscar").select2({
+                // --- Carga de emails por Ajax --- //
+                ajax: {
+                    url: '/autoridades/juzgados_json',
+                    headers: { "X-CSRF-TOKEN": "{{ csrf_token() }}" },
+                    dataType: 'json',
+                    delay: 250,
+                    type: "POST",
+                    data: function (params) {
+                        return { 'clave': params.term.toUpperCase(), "es_archivo_solicitante": true, "es_extinto": false };
+                    }
+                },
+                placeholder: "{{buscar}}",
+                minimumInputLength: 3,
+                allowClear: true
+            });
+        });
+    </script>
+    <script>
+        $(document).ready(function(){
+            $('#juzgado_id').addClass('js-example-placeholder-single');
+            $("#juzgado_id").select2({
+                // --- Carga de emails por Ajax --- //
+                ajax: {
+                    url: '/autoridades/juzgados_json',
+                    headers: { "X-CSRF-TOKEN": "{{ csrf_token() }}" },
+                    dataType: 'json',
+                    delay: 250,
+                    type: "POST",
+                    data: function (params) {
+                        return { 'clave': params.term.toUpperCase(), "es_archivo_solicitante": true, "es_extinto": false };
+                    }
+                },
+                placeholder: "{{buscar}}",
+                minimumInputLength: 3,
+                allowClear: true
+            });
+        });
+    </script>
+    <script>
+        $(document).ready(function(){
+            $('#tipo').addClass('js-example-placeholder-single');
+            $("#tipo").select2({
+                // --- Carga de emails por Ajax --- //
+                ajax: {
+                    url: '/arc_documentos_tipos/tipos_documentos_json',
+                    headers: { "X-CSRF-TOKEN": "{{ csrf_token() }}" },
+                    dataType: 'json',
+                    delay: 250,
+                    type: "POST",
+                    data: function (params) {
+                        return { 'nombre': params.term.toUpperCase() };
+                    }
+                },
+                placeholder: "",
+                minimumInputLength: 1,
+                allowClear: true
+            });
+        });
+    </script>
+    <script>
+    {% if not mostrar_secciones["juzgado_nombre"] %}
+        $(document).ready(function(){
+            $("#juzgadoInput_buscar").prop("selectedIndex", -1); // Poner en blanco el select
+            $("#juzgado_id").prop("selectedIndex", -1); // Poner en blanco el select
+        });
+    {% else %}
+        $(document).ready(function(){
+            // --- Carga de la opción elegida --- //
+            const newJuzgadoOption = new Option('{{ mostrar_secciones["juzgado_nombre"] }}', '{{ mostrar_secciones["juzgado_id"] }}', false, false);
+            $('#juzgado_id').append(newJuzgadoOption).trigger('change');
+        });
+    {% endif %}
+    </script>
+{% endblock %}

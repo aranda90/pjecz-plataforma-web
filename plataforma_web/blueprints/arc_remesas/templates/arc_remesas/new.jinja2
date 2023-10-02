@@ -1,0 +1,53 @@
+{% extends 'layouts/app.jinja2' %}
+{% import 'macros/form.jinja2' as f with context %}
+{% import 'macros/topbar.jinja2' as topbar %}
+
+{% block title %}Nueva Remesa{% endblock %}
+
+{% block custom_head %}
+    <!-- Select2 bootstrap -->
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://storage.googleapis.com/pjecz-informatica/static/css/select2.css" rel="stylesheet" />
+{% endblock %}
+
+
+{% block topbar_actions %}
+    {{ topbar.page('Nueva Remesa') }}
+{% endblock %}
+
+{% block content %}
+    {% call f.card() %}
+        {% call f.form_tag('arc_remesas.new', fid='remesa_form') %}
+            {% call f.form_group(form.num_oficio) %}{% endcall %}
+            {% call f.form_group(form.anio) %}{% endcall %}
+            {% call f.form_group(form.tipo_documentos) %}{% endcall %}
+            {% call f.form_group(form.crear) %}{% endcall %}
+        {% endcall %}
+    {% endcall %}
+{% endblock %}
+
+{% block custom_javascript %}
+    <!-- Select2 bootstrap -->
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script>
+        $(document).ready(function(){
+            $('#tipo_documentos').addClass('js-example-placeholder-single');
+            $("#tipo_documentos").select2({
+                // --- Carga de emails por Ajax --- //
+                ajax: {
+                    url: '/arc_documentos_tipos/tipos_documentos_json',
+                    headers: { "X-CSRF-TOKEN": "{{ csrf_token() }}" },
+                    dataType: 'json',
+                    delay: 250,
+                    type: "POST",
+                    data: function (params) {
+                        return { 'nombre': params.term.toUpperCase() };
+                    }
+                },
+                placeholder: "",
+                minimumInputLength: 1,
+                allowClear: true
+            });
+        });
+    </script>
+{% endblock %}

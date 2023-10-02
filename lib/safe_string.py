@@ -15,6 +15,27 @@ NUMERO_PUBLICACION_REGEXP = r"^\d+/[12]\d\d\d$"
 SENTENCIA_REGEXP = r"^\d+/[12]\d\d\d$"
 TOKEN_REGEXP = r"^[a-zA-Z0-9_.=+-]+$"
 URL_REGEXP = r"^(https?:\/\/)[0-9a-z-_]*(\.[0-9a-z-_]+)*(\.[a-z]+)+(\/[0-9a-z%-_]*)*?\/?$"
+DIRECCION_IP_REGEXP = r"^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
+
+
+def extract_expediente_anio(input_str: str) -> int:
+    """Extraer el anio AAAA del expediente NN/AAAA-XX como un entero"""
+    # Validar que comience con un numero/anio
+    inicio_str = re.match(r"^\d+\/[12]\d\d\d", input_str)
+    if inicio_str is None:
+        return 0
+    # Entregar el anio como entero
+    return int(inicio_str.group(0).split("/")[1])
+
+
+def extract_expediente_num(input_str: str) -> int:
+    """Extraer el numero NN del expediente NN/AAAA-XX como un entero"""
+    # Validar que comience con un numero/anio
+    inicio_str = re.match(r"^\d+\/[12]\d\d\d", input_str)
+    if inicio_str is None:
+        return 0
+    # Entregar el numero como entero
+    return int(inicio_str.group(0).split("/")[0])
 
 
 def safe_clave(input_str, max_len=16):
@@ -45,16 +66,16 @@ def safe_email(input_str, search_fragment=False):
 
 
 def safe_expediente(input_str):
-    """Safe expediente"""
+    """Safe expediente convierte la cadena en un formato de expediente valido como 123/2023, 123/2023-II, 123/2023-II-2, 123/2023-F2"""
     if not isinstance(input_str, str) or input_str.strip() == "":
         return ""
-    elementos = re.sub(r"[^a-zA-Z0-9]+", "|", unidecode(input_str)).split("|")
+    elementos = re.sub(r"[^a-zA-Z0-9]+", "|", unidecode(input_str.strip())).split("|")
     try:
-        numero = str(elementos[0])
+        numero = int(elementos[0])
         ano = int(elementos[1])
     except (IndexError, ValueError) as error:
         raise error
-    if ano < 1950 or ano > date.today().year:
+    if ano < 1900 or ano > date.today().year:
         raise ValueError
     extra_1 = ""
     if len(elementos) >= 3:
@@ -68,14 +89,28 @@ def safe_expediente(input_str):
     return limpio
 
 
-def safe_string(input_str, max_len=250, to_uppercase=True, do_unidecode=True):
+def safe_string(input_str, max_len=250, do_unidecode=True, save_enie=False, to_uppercase=True):
     """Safe string"""
     if not isinstance(input_str, str):
         return ""
     if do_unidecode:
-        new_string = re.sub(r"[^a-zA-Z0-9.()/-]+", " ", unidecode(input_str))
+        new_string = re.sub(r"[^a-zA-Z0-9.()/-]+", " ", input_str)
+        if save_enie:
+            new_string = ""
+            for char in input_str:
+                if char == "ñ":
+                    new_string += "ñ"
+                elif char == "Ñ":
+                    new_string += "Ñ"
+                else:
+                    new_string += unidecode(char)
+        else:
+            new_string = re.sub(r"[^a-zA-Z0-9.()/-]+", " ", unidecode(input_str))
     else:
-        new_string = re.sub(r"[^a-záéíóúüñA-ZÁÉÍÓÚÜÑ0-9.()/-]+", " ", input_str)
+        if save_enie is False:
+            new_string = re.sub(r"[^a-záéíóúüA-ZÁÉÍÓÚÜ0-9.()/-]+", " ", input_str)
+        else:
+            new_string = re.sub(r"[^a-záéíóúüñA-ZÁÉÍÓÚÜÑ0-9.()/-]+", " ", input_str)
     removed_multiple_spaces = re.sub(r"\s+", " ", new_string)
     final = removed_multiple_spaces.strip()
     if to_uppercase:
@@ -98,11 +133,11 @@ def safe_text(input_str, max_len=4096, to_uppercase=True):
     return (final[:max_len] + "...") if len(final) > max_len else final
 
 
-def safe_message(input_str, max_len=250):
+def safe_message(input_str, max_len=250, default_output_str="Sin descripción"):
     """Safe message"""
     message = str(input_str)
     if message == "":
-        message = "Sin descripción"
+        return default_output_str
     return (message[:max_len] + "...") if len(message) > max_len else message
 
 
@@ -123,7 +158,7 @@ def safe_sentencia(input_str):
         raise error
     if numero <= 0:
         raise ValueError
-    if ano < 1950 or ano > date.today().year:
+    if ano < 1900 or ano > date.today().year:
         raise ValueError
     limpio = f"{str(numero)}/{str(ano)}"
     if len(limpio) > 16:

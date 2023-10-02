@@ -4,6 +4,7 @@ Edictos, vistas
 import datetime
 import json
 from pathlib import Path
+from urllib.parse import quote
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
@@ -12,6 +13,8 @@ from werkzeug.datastructures import CombinedMultiDict
 from werkzeug.utils import secure_filename
 
 from lib.datatables import get_datatable_parameters, output_datatable_json
+from lib.exceptions import MyAnyError
+from lib.google_cloud_storage import get_blob_name_from_url, get_media_type_from_filename, get_file_from_gcs
 from lib.safe_string import safe_expediente, safe_message, safe_numero_publicacion, safe_string
 from lib.time_to_text import dia_mes_ano, mes_en_palabra
 from plataforma_web.blueprints.usuarios.decorators import permission_required
@@ -27,7 +30,6 @@ from plataforma_web.blueprints.permisos.models import Permiso
 edictos = Blueprint("edictos", __name__, template_folder="templates")
 
 MODULO = "EDICTOS"
-SUBDIRECTORIO = "Edictos"
 LIMITE_DIAS = 365
 LIMITE_ADMINISTRADORES_DIAS = 365  # Administradores pueden manipular un anio
 
@@ -36,8 +38,8 @@ LIMITE_ADMINISTRADORES_DIAS = 365  # Administradores pueden manipular un anio
 def checkout(id_hashed):
     """Acuse"""
     edicto = Edicto.query.get_or_404(Edicto.decode_id(id_hashed))
-    dia, mes, ano = dia_mes_ano(edicto.creado)
-    return render_template("edictos/checkout.jinja2", edicto=edicto, dia=dia, mes=mes.upper(), ano=ano)
+    dia, mes, anio = dia_mes_ano(edicto.creado)
+    return render_template("edictos/print.jinja2", edicto=edicto, dia=dia, mes=mes.upper(), anio=anio)
 
 
 @edictos.before_request
@@ -279,7 +281,7 @@ def datatable_json():
                 "expediente": edicto.expediente,
                 "numero_publicacion": edicto.numero_publicacion,
                 "archivo": {
-                    "url": edicto.url,
+                    "descargar_url": edicto.descargar_url,
                 },
             }
         )
@@ -288,7 +290,6 @@ def datatable_json():
 
 
 @edictos.route("/edictos/datatable_json_admin", methods=["GET", "POST"])
-@permission_required(MODULO, Permiso.ADMINISTRAR)
 def datatable_json_admin():
     """DataTable JSON para listado de edictos administradores"""
     # Tomar parámetros de Datatables
@@ -338,12 +339,31 @@ def datatable_json_admin():
                 "expediente": edicto.expediente,
                 "numero_publicacion": edicto.numero_publicacion,
                 "archivo": {
-                    "url": edicto.url,
+                    "descargar_url": url_for("edictos.download", url=quote(edicto.url)),
                 },
             }
         )
     # Entregar JSON
     return output_datatable_json(draw, total, data)
+
+
+@edictos.route("/edictos/descargar", methods=["GET"])
+@permission_required(MODULO, Permiso.ADMINISTRAR)
+def download():
+    """Descargar archivo desde Google Cloud Storage"""
+    url = request.args.get("url")
+    try:
+        # Obtener nombre del blob
+        blob_name = get_blob_name_from_url(url)
+        # Obtener tipo de media
+        media_type = get_media_type_from_filename(blob_name)
+        # Obtener archivo
+        archivo = get_file_from_gcs(current_app.config["CLOUD_STORAGE_DEPOSITO_EDICTOS"], blob_name)
+    except MyAnyError as error:
+        flash(str(error), "warning")
+        return redirect(url_for("edictos.list_active"))
+    # Entregar archivo
+    return current_app.response_class(archivo, mimetype=media_type)
 
 
 @edictos.route("/edictos/refrescar/<int:autoridad_id>")
@@ -417,7 +437,6 @@ def new():
     # Si viene el formulario
     form = EdictoNewForm(CombinedMultiDict((request.files, request.form)))
     if form.validate_on_submit():
-
         # Validar fecha
         fecha = form.fecha.data
         if not limite_dt <= datetime.datetime(year=fecha.year, month=fecha.month, day=fecha.day) <= hoy_dt:
@@ -473,13 +492,13 @@ def new():
         elementos.append(edicto.encode_id())
         archivo_str = "-".join(elementos) + ".pdf"
 
-        # Elaborar ruta SUBDIRECTORIO/Autoridad/YYYY/MES/archivo.pdf
+        # Elaborar ruta Autoridad/YYYY/MES/archivo.pdf
         ano_str = fecha.strftime("%Y")
         mes_str = mes_en_palabra(fecha.month)
-        ruta_str = str(Path(SUBDIRECTORIO, autoridad.directorio_edictos, ano_str, mes_str, archivo_str))
+        ruta_str = str(Path(autoridad.directorio_edictos, ano_str, mes_str, archivo_str))
 
         # Subir el archivo
-        deposito = current_app.config["CLOUD_STORAGE_DEPOSITO"]
+        deposito = current_app.config["CLOUD_STORAGE_DEPOSITO_EDICTOS"]
         storage_client = storage.Client()
         bucket = storage_client.bucket(deposito)
         blob = bucket.blob(ruta_str)
@@ -534,7 +553,6 @@ def new_for_autoridad(autoridad_id):
     # Si viene el formulario
     form = EdictoNewForm(CombinedMultiDict((request.files, request.form)))
     if form.validate_on_submit():
-
         # Validar fecha
         fecha = form.fecha.data
         if not limite_dt <= datetime.datetime(year=fecha.year, month=fecha.month, day=fecha.day) <= hoy_dt:
@@ -590,13 +608,13 @@ def new_for_autoridad(autoridad_id):
         elementos.append(edicto.encode_id())
         archivo_str = "-".join(elementos) + ".pdf"
 
-        # Elaborar ruta SUBDIRECTORIO/Autoridad/YYYY/MES/archivo.pdf
+        # Elaborar ruta Autoridad/YYYY/MES/archivo.pdf
         ano_str = fecha.strftime("%Y")
         mes_str = mes_en_palabra(fecha.month)
-        ruta_str = str(Path(SUBDIRECTORIO, autoridad.directorio_edictos, ano_str, mes_str, archivo_str))
+        ruta_str = str(Path(autoridad.directorio_edictos, ano_str, mes_str, archivo_str))
 
         # Subir el archivo
-        deposito = current_app.config["CLOUD_STORAGE_DEPOSITO"]
+        deposito = current_app.config["CLOUD_STORAGE_DEPOSITO_EDICTOS"]
         storage_client = storage.Client()
         bucket = storage_client.bucket(deposito)
         blob = bucket.blob(ruta_str)

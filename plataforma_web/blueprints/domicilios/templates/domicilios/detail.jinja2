@@ -18,11 +18,13 @@
 
 {% block content %}
     {% call detail.card(estatus=domicilio.estatus) %}
+        {{ detail.label_value('Edificio', domicilio.edificio) }}
         {{ detail.label_value('Calle', domicilio.calle) }}
         {{ detail.label_value('No. Exterior', domicilio.num_ext) }}
         {{ detail.label_value('No. Interior', domicilio.num_int) }}
         {{ detail.label_value('Colonia', domicilio.colonia) }}
         {{ detail.label_value('Municipio', domicilio.municipio) }}
+        {{ detail.label_value('Distrito', domicilio.distrito.nombre_corto) }}
         {{ detail.label_value('Estado', domicilio.estado) }}
         {{ detail.label_value('C.P.', domicilio.cp) }}
     {% endcall %}
@@ -31,12 +33,10 @@
             <table id="oficinas_datatable" class="table display nowrap" style="width:100%">
                 <thead>
                     <tr>
-                        <th>Claves</th>
-                        <th>Descripciones</th>
-                        <th>Distritos</th>
-                        <th>Aperturas</th>
-                        <th>Cierres</th>
-                        <th>L. P.</th>
+                        <th>Clave</th>
+                        <th>Descripción corta</th>
+                        <th>Distrito</th>
+                        <th>Tipo</th>
                     </tr>
                 </thead>
             </table>
@@ -58,9 +58,7 @@
                 { data: "detalle" },
                 { data: "descripcion_corta" },
                 { data: "distrito" },
-                { data: "apertura" },
-                { data: "cierre" },
-                { data: "limite_personas" }
+                { data: "tipo" }
             ];
             configDataTable['columnDefs'] = [
                 {

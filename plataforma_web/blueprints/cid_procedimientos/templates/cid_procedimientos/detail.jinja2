@@ -10,12 +10,14 @@
     {% call topbar.page_buttons('Procedimiento') %}
         {{ topbar.button_previous('Procedimientos', url_for('cid_procedimientos.list_active')) }}
         {% if show_button_edit_admin %}
-            {{ topbar.button_edit('Clasificar', url_for('cid_procedimientos.edit_admin', cid_procedimiento_id=cid_procedimiento.id)) }}
+            {{ topbar.button_edit('Editar Autoridad', url_for('cid_procedimientos.edit_admin', cid_procedimiento_id=cid_procedimiento.id)) }}
         {% endif %}
         {% if current_user.can_edit('CID PROCEDIMIENTOS') %}
-            {{ topbar.button_edit('Editar', url_for('cid_procedimientos.edit', cid_procedimiento_id=cid_procedimiento.id)) }}
-            {% if current_user.id == cid_procedimiento.usuario_id %}
-                {{ topbar.button_make('Firmar', url_for('cid_procedimientos.sign_for_maker', cid_procedimiento_id=cid_procedimiento.id)) }}
+            {% if not cid_procedimiento.firma %}
+                {{ topbar.button_edit('Editar', url_for('cid_procedimientos.edit', cid_procedimiento_id=cid_procedimiento.id)) }}
+                {% if current_user.id == cid_procedimiento.usuario_id %}
+                    {{ topbar.button_make('Firmar', url_for('cid_procedimientos.sign_for_maker', cid_procedimiento_id=cid_procedimiento.id)) }}
+                {% endif %}
             {% endif %}
         {% endif %}
         {% if current_user.can_admin('CID PROCEDIMIENTOS') %}
@@ -43,8 +45,13 @@
             {{ detail.label_value('Firma guardada', cid_procedimiento.firma) }}
             {{ detail.label_value('Firma al vuelo', firma_al_vuelo) }}
             {{ detail.label_value_new_tab('Archivo PDF', cid_procedimiento.archivo, cid_procedimiento.url) }}
-            {{ detail.label_value('Distrito', cid_procedimiento.autoridad.distrito.nombre) }}
-            {{ detail.label_value('Autoridad', cid_procedimiento.autoridad.descripcion) }}
+            {{ detail.label_value('Distrito', cid_procedimiento.autoridad.distrito.nombre_corto) }}
+            {{ detail.label_value('Autoridad', cid_procedimiento.autoridad.descripcion_corta) }}
+            {% if current_user.can_view('CID AREAS') %}
+                {{ detail.label_value('Área', cid_procedimiento.cid_area.clave + ' - ' + cid_procedimiento.cid_area.nombre, url_for('cid_areas.detail', cid_area_id=cid_procedimiento.cid_area_id)) }}
+            {% else %}
+                {{ detail.label_value('Área', cid_procedimiento.cid_area.clave + ' - ' + cid_procedimiento.cid_area.nombre) }}
+            {% endif %}
         {% endcall %}
         {% call accordion.item('objetivos_item', 'Objetivo', accordion_id, estatus=cid_procedimiento.estatus) %}
             {{ objetivo }}

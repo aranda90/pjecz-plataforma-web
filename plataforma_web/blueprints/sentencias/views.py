@@ -3,13 +3,18 @@ Sentencias, vistas
 """
 import datetime
 import json
+from urllib.parse import quote
 
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
+from pytz import timezone
+from sqlalchemy.sql.functions import count
 from werkzeug.datastructures import CombinedMultiDict
 
 from lib.datatables import get_datatable_parameters, output_datatable_json
-from lib.safe_string import safe_expediente, safe_message, safe_sentencia, safe_string
+from lib.exceptions import MyAnyError
+from lib.google_cloud_storage import get_blob_name_from_url, get_media_type_from_filename, get_file_from_gcs
+from lib.safe_string import extract_expediente_anio, extract_expediente_num, safe_expediente, safe_message, safe_sentencia, safe_string
 from lib.storage import GoogleCloudStorage, NotAllowedExtesionError, UnknownExtesionError, NotConfiguredError
 from lib.time_to_text import dia_mes_ano
 from plataforma_web.blueprints.usuarios.decorators import permission_required
@@ -21,15 +26,18 @@ from plataforma_web.blueprints.materias.models import Materia
 from plataforma_web.blueprints.materias_tipos_juicios.models import MateriaTipoJuicio
 from plataforma_web.blueprints.modulos.models import Modulo
 from plataforma_web.blueprints.permisos.models import Permiso
-from plataforma_web.blueprints.sentencias.forms import SentenciaNewForm, SentenciaEditForm, SentenciaSearchForm, SentenciaSearchAdminForm
+from plataforma_web.blueprints.sentencias.forms import SentenciaNewForm, SentenciaEditForm, SentenciaSearchForm, SentenciaSearchAdminForm, SentenciaReportForm
 from plataforma_web.blueprints.sentencias.models import Sentencia
 
 sentencias = Blueprint("sentencias", __name__, template_folder="templates")
 
+HUSO_HORARIO = "America/Mexico_City"
 MODULO = "SENTENCIAS"
-SUBDIRECTORIO = "Sentencias"
 LIMITE_DIAS = 10950  # 30 años
 LIMITE_ADMINISTRADORES_DIAS = 10950  # 30 años
+
+# Roles que deben estar en la base de datos
+ROL_REPORTES_TODOS = ["ADMINISTRADOR", "ESTADISTICA", "VISITADURIA JUDICIAL"]
 
 
 @sentencias.before_request
@@ -58,16 +66,22 @@ def list_active():
             filtros=json.dumps({"estatus": "A"}),
             titulo="Todas las V.P. de Sentencias",
             estatus="A",
+            form=None,
         )
     # Si es jurisdiccional ve lo de su autoridad
     if current_user.autoridad.es_jurisdiccional:
         autoridad = current_user.autoridad
+        form = SentenciaReportForm()
+        form.autoridad_id.data = autoridad.id  # Oculto la autoridad del usuario
+        form.fecha_desde.data = datetime.date.today().replace(day=1)  # Por defecto fecha_desde es el primer dia del mes actual
+        form.fecha_hasta.data = datetime.date.today()  # Por defecto fecha_hasta es hoy
         return render_template(
             "sentencias/list.jinja2",
             autoridad=autoridad,
             filtros=json.dumps({"autoridad_id": autoridad.id, "estatus": "A"}),
             titulo=f"V.P. de Sentencias de {autoridad.distrito.nombre_corto}, {autoridad.descripcion_corta}",
             estatus="A",
+            form=form,
         )
     # Ninguno de los anteriores
     return redirect(url_for("sentencias.list_distritos"))
@@ -85,6 +99,7 @@ def list_inactive():
             filtros=json.dumps({"estatus": "B"}),
             titulo="Todas las V.P. de Sentencias inactivas",
             estatus="B",
+            form=None,
         )
     # Si es jurisdiccional ve lo de su autoridad
     if current_user.autoridad.es_jurisdiccional:
@@ -95,6 +110,7 @@ def list_inactive():
             filtros=json.dumps({"autoridad_id": autoridad.id, "estatus": "B"}),
             titulo=f"V.P. de Sentencias inactivas de {autoridad.distrito.nombre_corto}, {autoridad.descripcion_corta}",
             estatus="B",
+            form=None,
         )
     # No es jurisdiccional, se redirige al listado de distritos
     return redirect(url_for("sentencias.list_distritos"))
@@ -124,16 +140,21 @@ def list_autoridades(distrito_id):
 def list_autoridad_sentencias(autoridad_id):
     """Listado de Sentencias activas de una autoridad"""
     autoridad = Autoridad.query.get_or_404(autoridad_id)
-    if current_user.can_admin("SENTENCIAS"):
+    form = None
+    plantilla = "sentencias/list.jinja2"
+    if current_user.can_admin("SENTENCIAS") or set(current_user.get_roles()).intersection(set(ROL_REPORTES_TODOS)):
         plantilla = "sentencias/list_admin.jinja2"
-    else:
-        plantilla = "sentencias/list.jinja2"
+        form = SentenciaReportForm()
+        form.autoridad_id.data = autoridad.id  # Oculto la autoridad que esta viendo
+        form.fecha_desde.data = datetime.date.today().replace(day=1)  # Por defecto fecha_desde es el primer dia del mes actual
+        form.fecha_hasta.data = datetime.date.today()  # Por defecto fecha_hasta es hoy
     return render_template(
         plantilla,
         autoridad=autoridad,
         filtros=json.dumps({"autoridad_id": autoridad.id, "estatus": "A"}),
         titulo=f"V.P. de Sentencias de {autoridad.distrito.nombre_corto}, {autoridad.descripcion_corta}",
         estatus="A",
+        form=form,
     )
 
 
@@ -152,6 +173,7 @@ def list_autoridad_sentencias_inactive(autoridad_id):
         filtros=json.dumps({"autoridad_id": autoridad.id, "estatus": "B"}),
         titulo=f"V.P. de Sentencias inactivas de {autoridad.distrito.nombre_corto}, {autoridad.descripcion_corta}",
         estatus="B",
+        form=None,
     )
 
 
@@ -266,7 +288,7 @@ def datatable_json():
     for sentencia in registros:
         data.append(
             {
-                "fecha": sentencia.fecha.strftime("%Y-%m-%d 00:00:00"),
+                "fecha": sentencia.fecha.strftime("%Y-%m-%d"),
                 "detalle": {
                     "sentencia": sentencia.sentencia,
                     "url": url_for("sentencias.detail", sentencia_id=sentencia.id),
@@ -276,7 +298,7 @@ def datatable_json():
                 "materia_tipo_juicio_descripcion": sentencia.materia_tipo_juicio.descripcion,
                 "es_perspectiva_genero": "Sí" if sentencia.es_perspectiva_genero else "",
                 "archivo": {
-                    "url": sentencia.url,
+                    "descargar_url": sentencia.descargar_url,
                 },
             }
         )
@@ -285,7 +307,6 @@ def datatable_json():
 
 
 @sentencias.route("/sentencias/datatable_json_admin", methods=["GET", "POST"])
-@permission_required(MODULO, Permiso.ADMINISTRAR)
 def datatable_json_admin():
     """DataTable JSON para sentencias admin"""
     # Tomar parámetros de Datatables
@@ -316,31 +337,95 @@ def datatable_json_admin():
         consulta = consulta.filter(Sentencia.fecha >= request.form["fecha_desde"])
     if "fecha_hasta" in request.form:
         consulta = consulta.filter(Sentencia.fecha <= request.form["fecha_hasta"])
-    registros = consulta.order_by(Sentencia.fecha.desc()).offset(start).limit(rows_per_page).all()
+    registros = consulta.order_by(Sentencia.id.desc()).offset(start).limit(rows_per_page).all()
     total = consulta.count()
+    # Zona horaria local
+    local_tz = timezone(HUSO_HORARIO)
     # Elaborar datos para DataTable
     data = []
     for sentencia in registros:
+        creado_local = sentencia.creado.astimezone(local_tz)  # La columna creado esta en UTC, convertir a local
         data.append(
             {
-                "creado": sentencia.creado.strftime("%Y-%m-%d %H:%M:%S"),
-                "autoridad": sentencia.autoridad.clave,
-                "fecha": sentencia.fecha.strftime("%Y-%m-%d 00:00:00"),
                 "detalle": {
-                    "sentencia": sentencia.sentencia,
+                    "id": sentencia.id,
                     "url": url_for("sentencias.detail", sentencia_id=sentencia.id),
                 },
+                "creado": creado_local.strftime("%Y-%m-%d %H:%M:%S"),
+                "autoridad": sentencia.autoridad.clave,
+                "fecha": sentencia.fecha.strftime("%Y-%m-%d"),
+                "sentencia": sentencia.sentencia,
                 "expediente": sentencia.expediente,
                 "materia_nombre": sentencia.materia_tipo_juicio.materia.nombre,
                 "materia_tipo_juicio_descripcion": sentencia.materia_tipo_juicio.descripcion,
                 "es_perspectiva_genero": "Sí" if sentencia.es_perspectiva_genero else "",
                 "archivo": {
-                    "url": sentencia.url,
+                    "descargar_url": url_for("sentencias.download", url=quote(sentencia.url)),
                 },
             }
         )
     # Entregar JSON
     return output_datatable_json(draw, total, data)
+
+
+@sentencias.route("/sentencias/datatable_tipos_de_juicios_json", methods=["GET", "POST"])
+def datatable_tipos_de_juicios_json():
+    """Datatable JSON con los tipos de juicios y sus cantidades"""
+    # Tomar parámetros de Datatables
+    draw, _, _ = get_datatable_parameters()
+    # SQLAlchemy database session
+    database = current_app.extensions["sqlalchemy"].db.session
+    # Dos columnas en la consulta
+    consulta = database.query(
+        MateriaTipoJuicio.descripcion.label("tipo_de_juicio"),
+        count("*").label("cantidad"),
+    )
+    # Juntar las tablas sentencias y materias_tipos_juicios
+    consulta = consulta.select_from(Sentencia).join(MateriaTipoJuicio)
+    # Debe venir la autoridad_id
+    autoridad = Autoridad.query.get_or_404(request.form["autoridad_id"])
+    consulta = consulta.filter(Sentencia.autoridad == autoridad)
+    # Debe venir la fecha_desde
+    consulta = consulta.filter(Sentencia.fecha >= request.form["fecha_desde"])
+    # Debe venir la fecha_hasta
+    consulta = consulta.filter(Sentencia.fecha <= request.form["fecha_hasta"])
+    # Agrupar
+    consulta = consulta.group_by(MateriaTipoJuicio.descripcion)
+    # Ordenar
+    consulta = consulta.order_by(MateriaTipoJuicio.descripcion)
+    # Consultar
+    resultados = consulta.all()
+    total = consulta.count()
+    # Elaborar datos para DataTable
+    data = []
+    for resultado in resultados:
+        data.append(
+            {
+                "tipo_de_juicio": resultado.tipo_de_juicio,
+                "cantidad": resultado.cantidad,
+            }
+        )
+    # Entregar JSON
+    return output_datatable_json(draw, total, data)
+
+
+@sentencias.route("/sentencias/descargar", methods=["GET"])
+@permission_required(MODULO, Permiso.ADMINISTRAR)
+def download():
+    """Descargar archivo desde Google Cloud Storage"""
+    url = request.args.get("url")
+    try:
+        # Obtener nombre del blob
+        blob_name = get_blob_name_from_url(url)
+        # Obtener tipo de media
+        media_type = get_media_type_from_filename(blob_name)
+        # Obtener archivo
+        archivo = get_file_from_gcs(current_app.config["CLOUD_STORAGE_DEPOSITO_SENTENCIAS"], blob_name)
+    except MyAnyError as error:
+        flash(str(error), "warning")
+        return redirect(url_for("sentencias.list_active"))
+    # Entregar archivo
+    return current_app.response_class(archivo, mimetype=media_type)
 
 
 @sentencias.route("/sentencias/refrescar/<int:autoridad_id>")
@@ -447,10 +532,11 @@ def new():
 
         # Inicializar la liberia Google Cloud Storage con el directorio base, la fecha, las extensiones permitidas y los meses como palabras
         gcstorage = GoogleCloudStorage(
-            base_directory=f"{SUBDIRECTORIO}/{autoridad.directorio_sentencias}",
+            base_directory=autoridad.directorio_sentencias,
             upload_date=fecha,
             allowed_extensions=["pdf"],
             month_in_word=True,
+            bucket_name=current_app.config["CLOUD_STORAGE_DEPOSITO_SENTENCIAS"],
         )
 
         # Validar archivo
@@ -466,7 +552,6 @@ def new():
 
         # Si es valido
         if es_valido:
-
             # Insertar registro
             sentencia = Sentencia(
                 autoridad=autoridad,
@@ -474,6 +559,8 @@ def new():
                 sentencia=sentencia_input,
                 sentencia_fecha=sentencia_fecha,
                 expediente=expediente,
+                expediente_anio=extract_expediente_anio(expediente),
+                expediente_num=extract_expediente_num(expediente),
                 fecha=fecha,
                 descripcion=descripcion,
                 es_perspectiva_genero=es_perspectiva_genero,
@@ -521,7 +608,7 @@ def new():
         "sentencias/new.jinja2",
         form=form,
         autoridad=autoridad,
-        materias=Materia.query.filter_by(estatus="A").order_by(Materia.id).all(),
+        materias=Materia.query.filter_by(en_sentencias=True).filter_by(estatus="A").order_by(Materia.id).all(),
         materias_tipos_juicios=MateriaTipoJuicio.query.filter_by(estatus="A").order_by(MateriaTipoJuicio.materia_id, MateriaTipoJuicio.descripcion).all(),
     )
 
@@ -596,10 +683,11 @@ def new_for_autoridad(autoridad_id):
 
         # Inicializar la liberia Google Cloud Storage con el directorio base, la fecha, las extensiones permitidas y los meses como palabras
         gcstorage = GoogleCloudStorage(
-            base_directory=f"{SUBDIRECTORIO}/{autoridad.directorio_sentencias}",
+            base_directory=autoridad.directorio_sentencias,
             upload_date=fecha,
             allowed_extensions=["pdf"],
             month_in_word=True,
+            bucket_name=current_app.config["CLOUD_STORAGE_DEPOSITO_SENTENCIAS"],
         )
 
         # Validar archivo
@@ -615,7 +703,6 @@ def new_for_autoridad(autoridad_id):
 
         # Si es valido
         if es_valido:
-
             # Insertar registro
             sentencia = Sentencia(
                 autoridad=autoridad,
@@ -623,6 +710,8 @@ def new_for_autoridad(autoridad_id):
                 sentencia=sentencia_input,
                 sentencia_fecha=sentencia_fecha,
                 expediente=expediente,
+                expediente_anio=extract_expediente_anio(expediente),
+                expediente_num=extract_expediente_num(expediente),
                 fecha=fecha,
                 descripcion=descripcion,
                 es_perspectiva_genero=es_perspectiva_genero,
@@ -670,7 +759,7 @@ def new_for_autoridad(autoridad_id):
         "sentencias/new_for_autoridad.jinja2",
         form=form,
         autoridad=autoridad,
-        materias=Materia.query.filter_by(estatus="A").order_by(Materia.id).all(),
+        materias=Materia.query.filter_by(en_sentencias=True).filter_by(estatus="A").order_by(Materia.id).all(),
         materias_tipos_juicios=MateriaTipoJuicio.query.filter_by(estatus="A").order_by(MateriaTipoJuicio.materia_id, MateriaTipoJuicio.descripcion).all(),
     )
 
@@ -711,6 +800,8 @@ def edit(sentencia_id):
         # Validar expediente
         try:
             sentencia.expediente = safe_expediente(form.expediente.data)
+            sentencia.expediente_anio = extract_expediente_anio(sentencia.expediente)
+            sentencia.expediente_num = extract_expediente_num(sentencia.expediente)
         except (IndexError, ValueError):
             flash("El expediente es incorrecto.", "warning")
             es_valido = False
@@ -755,7 +846,7 @@ def edit(sentencia_id):
         "sentencias/edit.jinja2",
         form=form,
         sentencia=sentencia,
-        materias=Materia.query.filter_by(estatus="A").order_by(Materia.id).all(),
+        materias=Materia.query.filter_by(en_sentencias=True).filter_by(estatus="A").order_by(Materia.id).all(),
         materias_tipos_juicios=MateriaTipoJuicio.query.filter_by(estatus="A").order_by(MateriaTipoJuicio.materia_id, MateriaTipoJuicio.descripcion).all(),
     )
 
@@ -840,3 +931,61 @@ def recover(sentencia_id):
         else:
             flash("No tiene permiso para recuperar.", "warning")
     return redirect(url_for("sentencias.detail", sentencia_id=sentencia_id))
+
+
+@sentencias.route("/sentencias/reporte", methods=["GET", "POST"])
+def report():
+    """Elaborar reporte de sentencias"""
+    # Preparar el formulario
+    form = SentenciaReportForm()
+    # Si viene el formulario
+    if form.validate():
+        # Tomar valores del formulario
+        autoridad = Autoridad.query.get_or_404(int(form.autoridad_id.data))
+        fecha_desde = form.fecha_desde.data
+        fecha_hasta = form.fecha_hasta.data
+        por_tipos_de_juicios = bool(form.por_tipos_de_juicios.data)
+        # Si la fecha_desde es posterior a la fecha_hasta, se intercambian
+        if fecha_desde > fecha_hasta:
+            fecha_desde, fecha_hasta = fecha_hasta, fecha_desde
+        # Si no es administrador, ni tiene un rol para elaborar reportes de todos
+        if not current_user.can_admin("SENTENCIAS") and not set(current_user.get_roles()).intersection(set(ROL_REPORTES_TODOS)):
+            # Si la autoridad del usuario no es la del formulario, se niega el acceso
+            if current_user.autoridad_id != autoridad.id:
+                flash("No tiene permiso para acceder a este reporte.", "warning")
+                return redirect(url_for("listas_de_acuerdos.list_active"))
+        # Si es por tipos de juicios
+        if por_tipos_de_juicios:
+            # Entregar pagina con los tipos de juicios y sus cantidades
+            return render_template(
+                "sentencias/report_tipos_de_juicios.jinja2",
+                autoridad=autoridad,
+                fecha_desde=fecha_desde,
+                fecha_hasta=fecha_hasta,
+                filtros=json.dumps(
+                    {
+                        "autoridad_id": autoridad.id,
+                        "estatus": "A",
+                        "fecha_desde": fecha_desde.strftime("%Y-%m-%d"),
+                        "fecha_hasta": fecha_hasta.strftime("%Y-%m-%d"),
+                    }
+                ),
+            )
+        # De lo contrario, entregar pagina con el reporte de sentencias y enlaces publicos
+        return render_template(
+            "sentencias/report.jinja2",
+            autoridad=autoridad,
+            fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta,
+            filtros=json.dumps(
+                {
+                    "autoridad_id": autoridad.id,
+                    "estatus": "A",
+                    "fecha_desde": fecha_desde.strftime("%Y-%m-%d"),
+                    "fecha_hasta": fecha_hasta.strftime("%Y-%m-%d"),
+                }
+            ),
+        )
+    # No viene el formulario, por lo tanto se advierte del error
+    flash("Error: datos incorrectos para hacer el reporte de sentencias.", "warning")
+    return redirect(url_for("sentencias.list_active"))

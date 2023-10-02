@@ -1,0 +1,252 @@
+{% extends 'layouts/app.jinja2' %}
+{% import 'macros/list.jinja2' as list %}
+{% import 'macros/topbar.jinja2' as topbar %}
+
+{% block title %}Expedientes{% endblock %}
+
+{% block custom_head %}
+    <!-- Select2 bootstrap -->
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://storage.googleapis.com/pjecz-informatica/static/css/select2.css" rel="stylesheet" />
+{% endblock %}
+
+{% block topbar_actions %}
+    {% call topbar.page_buttons(titulo) %}
+        {% if current_user.can_edit('ARC DOCUMENTOS') %}
+            {% if estatus == 'B' %}{{ topbar.button_list_active('Activos', url_for('arc_documentos.list_active')) }}{% endif %}
+        {% endif %}
+        {% if current_user.can_view('ARC JUZGADOS EXTINTOS') %}
+            {{ topbar.button('Juzgados Extintos', url_for('arc_juzgados_extintos.list_active'), 'mdi:map-marker-off') }}
+        {% endif %}
+        {% if current_user.can_view('ARC DOCUMENTOS TIPOS') %}
+            {{ topbar.button('Tipos de Documentos', url_for('arc_documentos_tipos.list_active'), 'mdi:file-code') }}
+        {% endif %}
+        {% if current_user.can_insert('ARC DOCUMENTOS') %}
+            {{ topbar.button_new('Nuevo Documento', url_for('arc_documentos.new')) }}
+        {% endif %}
+    {% endcall %}
+{% endblock %}
+
+{% block content %}
+    {% call list.card() %}
+        <!-- Formulario de filtros -->
+        <div class="row">
+            <div class="col">
+                <form class="row g-1 mb-3" id="buscadorForm" onsubmit="filtros_documentos.buscar(); return false;">
+                    <div class="col-2">
+                        <div class="form-floating">
+                            <input id="expedienteInput" type="text" class="form-control" aria-label="Núm. Expediente" onchange="filtros_documentos.buscar(); return false;">
+                            <label for="expedienteInput">Núm. Expediente</label>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="form-floating">
+                            <input id="juicioInput" type="text" class="form-control" aria-label="Tipo de Juicio" onchange="filtros_documentos.buscar(); return false;">
+                            <label for="juicioInput">Tipo de Juicio</label>
+                        </div>
+                    </div>
+                    <div class="col-3">
+                        <div class="form-floating">
+                            <select id="juzgadoInput" class="form-control js-select2-filter" onchange="filtros_documentos.buscar(); return false;" style="text-transform: uppercase"></select>
+                            <label for="juzgadoInput">Instancia</label>
+                        </div>
+                    </div>
+                    <div class="col-3">
+                        <div class="form-floating">
+                            <select id="tipoSelect" class="form-control js-select2-filter" onchange="filtros_documentos.buscar(); return false;" style="text-transform: uppercase;"></select>
+                            <label for="tipoSelect">Tipo</label>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="form-floating">
+                            <input id="partesInput" type="text" class="form-control" aria-label="text" style="text-transform: uppercase">
+                            <label for="partesInput">Partes</label>
+                        </div>
+                    </div>
+                    <div class="col-3">
+                        <div class="form-floating">
+                            <select id="juzgadoExtintoInput" class="form-control js-select2-filter" onchange="filtros_documentos.buscar(); return false;" style="text-transform: uppercase"></select>
+                            <label for="juzgadoExtintoInput">J. Extintos</label>
+                        </div>
+                    </div>
+                    <div class="col-3">
+                        <div class="form-floating">
+                            <select class="form-select" id="ubicacionSelect" name="ubicacionSelect" aria-label="Todas" onchange="filtros_documentos.buscar(); return false;" style="flex: inherit;">
+                                <option selected value=""></option>
+                                {% for ubicacion in ubicaciones %}
+                                    <option value="{{ubicacion}}">{{ubicacion}}</option>
+                                {% endfor %}
+                            </select>
+                            <label for="ubicacionSelect">Ubicación</label>
+                        </div>
+                    </div>
+                    <div class="col-2 text-end">
+                        <button title="Buscar" class="btn btn-primary btn-lg" onclick="filtros_documentos.buscar(); return false;" id="button-buscar"><span class="iconify" data-icon="mdi:magnify"></span></button>
+                        <button title="Limpiar" class="btn btn-warning btn-lg" type="reset" onclick="filtros_documentos.limpiar();" id="button-limpiar"><span class="iconify" data-icon="mdi:broom"></span></button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <!-- Datatable -->
+        <table id="arc_documentos_datatable" class="table {% if estatus == 'B'%}table-dark{% endif %} display nowrap" style="width:100%">
+            <thead>
+                <tr>
+                    <th>Expediente</th>
+                    <th>Instancia</th>
+                    <th>Tipo</th>
+                    <th>Tipo de Juicio</th>
+                    <th>Partes</th>
+                    <th>Ubicación</th>
+                </tr>
+            </thead>
+        </table>
+    {% endcall %}
+{% endblock %}
+
+{% block custom_javascript %}
+    <!-- Importación de la configuración para DataTables -->
+    <script src="/static/js/datatables_config.js"></script>
+    <!-- Importación de los fitlros para dataTable -->
+    <script src="/static/js/datatables_filtros.js"></script>
+    <script>
+        const dataTable_funcs_documentos = new ConfigDataTable( "{{ csrf_token() }}" );
+        let configDataTable_documentos = dataTable_funcs_documentos.config;
+        configDataTable_documentos['ajax']['url'] = '/arc_documentos/datatable_json';
+        configDataTable_documentos['ajax']['data'] = {{ filtros }};
+        configDataTable_documentos['columns'] = [
+            { data: 'expediente' },
+            { data: 'juzgado' },
+            { data: 'tipo' },
+            { data: 'juicio' },
+            { data: 'partes' },
+            { data: 'ubicacion' }
+        ];
+        configDataTable_documentos['columnDefs'] = [
+            {
+                targets: 0, // expediente
+                data: null,
+                render: function(data, type, row, meta) {
+                    return '<a href="' + data.url + '">' + data.expediente + '</a>';
+                }
+            },
+            {
+                targets: 1, // juzgado
+                data: null,
+                render: function(data, type, row, meta) {
+                    return '<span title="' + data.nombre + '"><a href="' + data.url + '">' + data.clave + '</span></a>';
+                }
+            },
+            {
+                targets: 3, // Juicio
+                data: null,
+                render: function(data, type, row, meta) {
+                    return dataTable_funcs_documentos.texto_cortado(data, 16);
+                }
+            },
+            {
+                targets: 4, // partes
+                data: null,
+                render: function(data, type, row, meta) {
+                    if (data.actor.length > 24)
+                        actor = '<span title="' + data.actor + '">' + data.actor.substr(0, 24) + '…' + '</span>';
+                    else
+                        actor = data.actor;
+                    if (data.demandado.length > 24)
+                        demandado = '<span title="' + data.demandado + '">' + data.demandado.substr(0, 24) + '…' + '</span>';
+                    else
+                        demandado = data.demandado;
+                    return '<strong>Actor:</strong> ' + actor + '<br>' + '<strong>Demandado:</strong> ' + demandado;
+                }
+            },
+            {
+                targets: 5, // ubicacion
+                data: null,
+                render: function(data, type, row, meta) {
+
+                    switch (data)    {
+                        case "NO DEFINIDO": return '<span class="badge rounded-pill bg-danger">NO DEFINIDO <span class="iconify" data-icon="mdi:close-octagon"></span></span>';   break;
+                        case "JUZGADO":     return '<span class="badge rounded-pill bg-info text-dark">JUZGADO <span class="iconify" data-icon="mdi:gavel"></span></span>';   break;
+                        case "REMESA":     return '<span class="badge rounded-pill bg-warning text-dark">REMESA <span class="iconify" data-icon="mdi:truck"></span></span>';   break;
+                        case "ARCHIVO":      return '<span class="badge rounded-pill bg-secondary">ARCHIVO <span class="iconify" data-icon="mdi:archive"></span></span>';   break;
+                    }
+                    return data;
+                }
+            }
+        ];
+
+        // Declaración de los Filtros utilizados
+        // Creación del Objeto manejador de Filtros
+        const filtros_documentos = new Filtros('#arc_documentos_datatable', configDataTable_documentos);
+        // Añadimos los difrentes inputs utilizados
+        filtros_documentos.add_input('expedienteInput', 'expediente');
+        filtros_documentos.add_input('juicioInput', 'juicio');
+        filtros_documentos.add_input('juzgadoInput', 'juzgado_id');
+        filtros_documentos.add_input('tipoSelect', 'tipo');
+        filtros_documentos.add_input('partesInput', 'partes');
+        filtros_documentos.add_input('juzgadoExtintoInput', 'juzgado_extinto_id');
+        filtros_documentos.add_input('ubicacionSelect', 'ubicacion');
+        // Precarga de los valores de los inputs mantenidos después de la carga de la página.
+        filtros_documentos.precarga();
+    </script>
+    <!-- Select2 bootstrap -->
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script>
+        $(document).ready(function(){
+            $('#juzgadoInput').select2({
+                // --- Carga de juzgados por Ajax --- //
+                ajax: {
+                    url: '/autoridades/juzgados_json',
+                    headers: { "X-CSRF-TOKEN": "{{ csrf_token() }}" },
+                    dataType: 'json',
+                    delay: 250,
+                    type: "POST",
+                    data: function (params) {
+                        return { 'clave': params.term.toUpperCase(), "es_archivo_solicitante": true };
+                    }
+                },
+                minimumInputLength: 3,
+                cache: false
+            });
+        });
+    </script>
+    <script>
+        $(document).ready(function(){
+            $('#tipoSelect').addClass('js-example-placeholder-single');
+            $("#tipoSelect").select2({
+                // --- Carga de emails por Ajax --- //
+                ajax: {
+                    url: '/arc_documentos_tipos/tipos_documentos_json',
+                    headers: { "X-CSRF-TOKEN": "{{ csrf_token() }}" },
+                    dataType: 'json',
+                    delay: 250,
+                    type: "POST",
+                    data: function (params) {
+                        return { 'nombre': params.term.toUpperCase() };
+                    }
+                },
+                placeholder: "",
+                minimumInputLength: 1,
+                allowClear: true
+            });
+        });
+    </script>
+    <script>
+        $(document).ready(function(){
+            $('#juzgadoExtintoInput').select2({
+                // --- Carga de juzgados por Ajax --- //
+                ajax: {
+                    url: '/arc_juzgados_extintos/juzgados_extintos_json',
+                    headers: { "X-CSRF-TOKEN": "{{ csrf_token() }}" },
+                    dataType: 'json',
+                    delay: 250,
+                    type: "POST",
+                    data: function (params) {
+                        return { 'clave': params.term.toUpperCase() };
+                    }
+                },
+                minimumInputLength: 3,
+                cache: false
+            });
+        });
+    </script>
+{% endblock %}

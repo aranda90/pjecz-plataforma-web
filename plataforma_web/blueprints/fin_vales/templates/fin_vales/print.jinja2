@@ -18,12 +18,36 @@
         </p>
     </div>
     <div id="seccionFirma">
-        <p style="margin-bottom: 2cm;">A T E N T A M E N T E</p>
-        <p>
+        <p style="margin-bottom: 1cm;">A T E N T A M E N T E</p>
+        <p style="margin-bottom: 1cm;">
             {{ fin_vale.solicito_puesto }}<br>
             {{ fin_vale.solicito_nombre }}
         </p>
     </div>
+    {% if efirma_sello_digital %}
+    <div id="seccionEFirma">
+        <table>
+            <tr>
+                <td colspan="2">
+                    Este documento tiene <strong>firma electrónica.</strong> Su estado es <strong>{{ fin_vale.estado }}.</strong> Para validarlo:
+                </td>
+            </tr>
+            <tr>
+                <td>1. Con su teléfono celular <strong>lea este QR</strong> y cargue la página.</td>
+                <td>2. Revise que el <strong>Sello digital</strong> sea igual.</td>
+            </tr>
+            <tr>
+                <td style="text-align: center;"><img class="imagenQR" src="{{ efirma_qr_url }}" alt="QR"></td>
+                <td class="textoSelloDigital"> {{ efirma_sello_digital }}</td>
+            </tr>
+            <tr>
+                <td colspan="2">
+                    3. Y verifique que en <strong>Cadena original</strong> aparezca la misma información.
+                </td>
+            </tr>
+        </table>
+    </div>
+    {% endif %}
 {% endblock %}
 
 {% block custom_javascript %}

@@ -1,0 +1,523 @@
+{% extends 'layouts/app.jinja2' %}
+{% import 'macros/list.jinja2' as list %}
+{% import 'macros/topbar.jinja2' as topbar %}
+
+{% block title %}Archivo{% endblock %}
+
+{% block custom_head %}
+    <!-- Select2 bootstrap -->
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://storage.googleapis.com/pjecz-informatica/static/css/select2.css" rel="stylesheet" />
+{% endblock %}
+
+{% block topbar_actions %}
+    {% call topbar.page_buttons(titulo) %}
+        {% if mostrar_btn_local_global == 'LOCAL' %}
+            <div class="btn-group me-2">
+                <button type="button" class="btn btn-sm btn-secondary active" disabled><span class="iconify" data-icon="mdi:map-marker"></span> Locales</button>
+                {% if mostrando_historial %}
+                    <a class="btn btn-sm btn-outline-primary" href="{{url_for('arc_archivos.list_all', historial=1)}}"><span class="iconify" data-icon="mdi:earth"></span> Todos</a>
+                {% else %}
+                    <a class="btn btn-sm btn-outline-primary" href="{{url_for('arc_archivos.list_all', historial=0)}}"><span class="iconify" data-icon="mdi:earth"></span> Todos</a>
+                {% endif %}
+            </div>
+        {% elif mostrar_btn_local_global == 'GLOBAL' %}
+            <div class="btn-group me-2">
+                {% if mostrando_historial %}
+                    <a class="btn btn-sm btn-outline-primary" href="{{url_for('arc_archivos.list_history')}}"><span class="iconify" data-icon="mdi:map-marker"></span> Locales</a>
+                {% else %}
+                    <a class="btn btn-sm btn-outline-primary" href="{{url_for('arc_archivos.list_active')}}"><span class="iconify" data-icon="mdi:map-marker"></span> Locales</a>
+                {% endif %}
+                <button type="button" class="btn btn-sm btn-secondary active" disabled><span class="iconify" data-icon="mdi:earth"></span> Todos</button>
+            </div>
+        {% endif %}
+        {% if mostrar_btn_historial == "IR_AL_HISTORIAL" %}
+            {{ topbar.button('Historial', url_for('arc_archivos.list_history'), 'mdi:history') }}
+        {% elif mostrar_btn_historial == "IR_A_ACTIVOS" %}
+            <div class="btn-group me-2">
+                <a class="btn btn-sm btn-outline-success" href="{{url_for('arc_archivos.list_active')}}"><span class="iconify" data-icon="mdi:inbox-full"></span> Activos</a>
+                <button type="button" class="btn btn-sm btn-secondary active" disabled><span class="iconify" data-icon="mdi:history"></span> Historial</button>
+            </div>
+        {% endif %}
+    {% endcall %}
+{% endblock %}
+
+{% block content %}
+    <!-- Card de Sedes -->
+    {% if mostrar_btn_local_global == 'GLOBAL' %}
+        {% call list.card() %}
+            <!-- Formulario de Sedes -->
+            <div class="row">
+                <div class="col">
+                    <form class="row g-1" id="buscadorSedeForm" onsubmit="seleccionar_sede(); return false;" autocomplete="off">
+                        <div class="form-floating">
+                            <select class="form-select" id="sedeSelect" name="sedeSelect" aria-label="sede" onchange="seleccionar_sede(); return false;" style="flex: inherit;">
+                                <option selected value=""></option>
+                                {% for sede in sedes %}
+                                    <option value="{{sede.id}}">{{sede.nombre}}</option>
+                                {% endfor %}
+                            </select>
+                            <label for="sedeSelect">Distritos (Sedes)</label>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        {% endcall %}
+    {% endif %}
+    <!-- Card Solicitudes -->
+    {% call topbar.page_buttons('Solicitudes') %}
+    {% endcall %}
+    {% call list.card() %}
+        <!-- Formulario de filtros SOLICITUDES -->
+        <div class="row">
+            <div class="col">
+                <form class="row g-1 mb-3" id="buscadorForm" onsubmit="filtros_solicitudes.buscar(); return false;" autocomplete="off">
+                    <div class="col-3">
+                        <div class="form-floating">
+                            <input id="idInput_solicitud" type="text" class="form-control" aria-label="ID" onchange="filtros_solicitudes.buscar(); return false;">
+                            <label for="idInput_solicitud">ID</label>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="form-floating">
+                            <select id="juzgadoInput_solicitud" class="form-control js-select2-filter" onchange="filtros_solicitudes.buscar(); return false;" style="text-transform: uppercase"></select>
+                            <label for="juzgadoInput_solicitud">Instancia</label>
+                        </div>
+                    </div>
+                    <div class="col-3">
+                        <div class="form-floating">
+                            <input id="documentoInput_solicitud" type="text" class="form-control" aria-label="Documento" onchange="filtros_solicitudes.buscar(); return false;">
+                            <label for="documentoInput_solicitud">Expediente</label>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="form-floating">
+                            <select class="form-select" id="estadoSelect_solicitud" name="estadoSelect_solicitud" aria-label="Estado" onchange="filtros_solicitudes.buscar(); return false;" style="flex: inherit;">
+                                <option selected value=""></option>
+                                {% for estado in estados_solicitudes %}
+                                    <option value="{{estado}}">{{estado}}</option>
+                                {% endfor %}
+                            </select>
+                            <label for="estadoSelect_solicitud">Estado</label>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="form-floating">
+                            <select id="asignadoInput_solicitud" class="form-control js-select2-filter" onchange="filtros_solicitudes.buscar(); return false;" style="text-transform: uppercase"></select>
+                            <label for="asignadoInput_solicitud">Asignado</label>
+                        </div>
+                    </div>
+                    <div class="col-2 text-end">
+                        <button title="Buscar" class="btn btn-primary btn-lg" onclick="filtros_solicitudes.buscar(); return false;" id="button-buscar"><span class="iconify" data-icon="mdi:magnify"></span></button>
+                        <button title="Limpiar" class="btn btn-warning btn-lg" type="reset" onclick="filtros_solicitudes.limpiar();" id="button-limpiar"><span class="iconify" data-icon="mdi:broom"></span></button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <!-- Datatable SOLICITUDES -->
+        <table id="arc_solicitudes_datatable" class="table display nowrap" style="width:100%">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Creado</th>
+                    <th>Tipo</th>
+                    <th>Instancia</th>
+                    <th><span title="Número de Documento">No. Doc</span></th>
+                    <th>Estado</th>
+                    <th>Asignado</th>
+                </tr>
+            </thead>
+        </table>
+    {% endcall %}
+    {% call topbar.page_buttons('Remesas') %}
+    {% endcall %}
+    {% call list.card() %}
+        <!-- Formulario de filtros REMESA -->
+        <div class="row">
+            <div class="col">
+                <form class="row g-1 mb-3" id="buscadorForm" onsubmit="filtros_remesas.buscar(); return false;" autocomplete="off">
+                    <div class="col-2">
+                        <div class="form-floating">
+                            <input id="idInput_remesa" type="text" class="form-control" onchange="filtros_remesas.buscar(); return false;">
+                            <label for="idInput_remesa">ID</label>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="form-floating">
+                            <select id="juzgadoInput_remesa" class="form-control js-select2-filter" onchange="filtros_remesas.buscar(); return false;" style="text-transform: uppercase"></select>
+                            <label for="juzgadoInput_remesa">Instancia</label>
+                        </div>
+                    </div>
+                    <div class="col-2">
+                        <div class="form-floating">
+                            <input id="anioInput_remesa" type="text" class="form-control" onchange="filtros_remesas.buscar(); return false;">
+                            <label for="anioInput_remesa">Año</label>
+                        </div>
+                    </div>
+                    <div class="col-2">
+                        <div class="form-floating">
+                            <input id="numOficioInput_remesa" type="text" class="form-control" onchange="filtros_remesas.buscar(); return false;">
+                            <label for="numOficioInput_remesa">Núm. Oficio</label>
+                        </div>
+                    </div>
+                    <div class="col-3">
+                        <div class="form-floating">
+                            <select id="tipoDocumentoInput_remesa" class="form-control js-select2-filter" onchange="filtros_remesas.buscar(); return false;" style="text-transform: uppercase"></select>
+                            <label for="tipoDocumentoInput_remesa">Tipo de Documento</label>
+                        </div>
+                    </div>
+                    <div class="col-3">
+                        <div class="form-floating">
+                            <select class="form-select" id="estadoSelect_remesa" name="estadoSelect_remesa" aria-label="Estado" onchange="filtros_remesas.buscar(); return false;" style="flex: inherit;">
+                                <option selected value=""></option>
+                                {% for estado in estados_remesas %}
+                                    <option value="{{estado}}">{{estado}}</option>
+                                {% endfor %}
+                            </select>
+                            <label for="estadoSelect_remesa">Estado</label>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="form-floating">
+                            <select id="asignadoInput_remesa" class="form-control js-select2-filter" onchange="filtros_remesas.buscar(); return false;" style="text-transform: uppercase"></select>
+                            <label for="asignadoInput_remesa">Asignado</label>
+                        </div>
+                    </div>
+                    <div class="col-2 text-end">
+                        <button title="Buscar" class="btn btn-primary btn-lg" onclick="filtros_remesas.buscar(); return false;" id="button-buscar"><span class="iconify" data-icon="mdi:magnify"></span></button>
+                        <button title="Limpiar" class="btn btn-warning btn-lg" type="reset" onclick="filtros_remesas.limpiar();" id="button-limpiar"><span class="iconify" data-icon="mdi:broom"></span></button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <!-- Datatable REMESAS -->
+        <table id="arc_remesas_datatable" class="table display nowrap" style="width:100%">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Última Actualización</th>
+                    <th>Instancia</th>
+                    <th>Años</th>
+                    <th>Núm. Oficio</th>
+                    <th>Tipo Documentos</th>
+                    <th>Núm. Docs.</th>
+                    <th>Estado</th>
+                    <th>Asignado</th>
+                </tr>
+            </thead>
+        </table>
+    {% endcall %}
+{% endblock %}
+
+{% block custom_javascript %}
+    <!-- Importación de la configuración para DataTables -->
+    <script src="/static/js/datatables_config.js"></script>
+    <!-- Importación de los fitlros para dataTable -->
+    <script src="/static/js/datatables_filtros.js"></script>
+    <script>
+        const dataTable_funcs_solicitudes = new ConfigDataTable( "{{ csrf_token() }}" );
+        let configDataTable_solicitudes = dataTable_funcs_solicitudes.config;
+        configDataTable_solicitudes['ajax']['url'] = '/arc_solicitudes/datatable_json';
+        configDataTable_solicitudes['ajax']['data'] = {{ filtros_solicitudes }};
+        configDataTable_solicitudes['columns'] = [
+            { data: 'solicitud' },
+            { data: 'tiempo' },
+            { data: 'tipo' },
+            { data: 'juzgado' },
+            { data: 'documento' },
+            { data: 'estado' },
+            { data: 'asignado' }
+        ];
+        configDataTable_solicitudes['columnDefs'] = [
+            {
+                targets: 0, // id
+                data: null,
+                render: function(data, type, row, meta) {
+                    return dataTable_funcs_solicitudes.texto_con_url(data.id, data.url);
+                }
+            },
+            {
+                targets: 1, // tiempo
+                data: null,
+                render: function(data, type, row, meta) {
+                    return dataTable_funcs_solicitudes.texto_tiempo(data, moment, "YYYY-MM-DD HH:mm");
+                }
+            },
+            {
+                targets: 3, // juzgado
+                data: null,
+                render: function(data, type, row, meta) {
+                    return dataTable_funcs_solicitudes.texto_con_tooltip(data.clave, data.nombre);
+                }
+            },
+            {
+                targets: 4, // documento
+                data: null,
+                render: function(data, type, row, meta) {
+                    return dataTable_funcs_solicitudes.texto_con_url(data.expediente, data.url);
+                }
+            },
+            {
+                targets: 5, // estado
+                data: null,
+                render: function(data, type, row, meta) {
+                    let bgcolor = "bg-dark";
+                    switch (data)    {
+                        case "SOLICITADO":      bgcolor = 'bg-warning text-dark';   break;
+                        case "CANCELADO":       bgcolor = "bg-secondary";           break;
+                        case "ASIGNADO":        bgcolor = 'bg-primary';             break;
+                        case "ENCONTRADO":      bgcolor = 'bg-purple';              break;
+                        case "NO ENCONTRADO":   bgcolor = 'bg-danger';              break;
+                        case "ENVIANDO":        bgcolor = 'bg-pink';                break;
+                        case "ENTREGADO":       bgcolor = 'bg-success';             break;
+                    }
+                    return '<span class="badge rounded-pill ' + bgcolor + '">' + data + '</span>';
+                }
+            },
+            {
+                targets: 6, // asignado
+                data: null,
+                render: function(data, type, row, meta) {
+                    return dataTable_funcs_solicitudes.texto_cortado(data.nombre);
+                }
+            }
+        ];
+        configDataTable_solicitudes['rowCallback'] = function(row, data) {
+            switch (data.estado)    {
+                case "SOLICITADO":      $(row).css("background-color", "#fef9e7");  break;
+                case "CANCELADO":       $(row).css("background-color", "#eeeeee");  break;
+                case "ASIGNADO":        $(row).css("background-color", "#ebf5fb");  break;
+                case "ENCONTRADO":      $(row).css("background-color", "#f5eef8");  break;
+                case "NO ENCONTRADO":   $(row).css("background-color", "#fdedec");  break;
+                case "ENVIANDO":        $(row).css("background-color", "#f7d6e6");  break;
+                case "ENTREGADO":       $(row).css("background-color", "#d1e7dd");  break;
+            }
+        };
+
+        // Declaración de los Filtros utilizados
+        // Creación del Objeto manejador de Filtros
+        const filtros_solicitudes = new Filtros('#arc_solicitudes_datatable', configDataTable_solicitudes);
+        // Añadimos los difrentes inputs utilizados
+        filtros_solicitudes.add_input('idInput_solicitud', 'solicitud_id');
+        filtros_solicitudes.add_input('documentoInput_solicitud', 'expediente');
+        filtros_solicitudes.add_input('juzgadoInput_solicitud', 'juzgado_id');
+        filtros_solicitudes.add_input('asignadoInput_solicitud', 'asignado_id');
+        filtros_solicitudes.add_input('estadoSelect_solicitud', 'estado');
+        // Precarga de los valores de los inputs mantenidos después de la carga de la página.
+        filtros_solicitudes.precarga();
+    </script>
+
+    <!-- DataTable para Remesas -->
+    <script>
+        const dataTable_funcs_remesas = new ConfigDataTable( "{{ csrf_token() }}" );
+        let configDataTable_remesas = dataTable_funcs_remesas.config;
+        configDataTable_remesas['ajax']['url'] = '/arc_remesas/datatable_json';
+        configDataTable_remesas['ajax']['data'] = {{ filtros_remesas }};
+        configDataTable_remesas['columns'] = [
+            { data: 'remesa' },
+            { data: 'tiempo' },
+            { data: 'juzgado' },
+            { data: 'anio' },
+            { data: 'num_oficio' },
+            { data: 'tipo_documentos' },
+            { data: 'num_docs' },
+            { data: 'estado' },
+            { data: 'asignado' }
+        ];
+        configDataTable_remesas['columnDefs'] = [
+            {
+                targets: 0, // id
+                data: null,
+                render: function(data, type, row, meta) {
+                    return dataTable_funcs_remesas.texto_con_url(data.id, data.url);
+                }
+            },
+            {
+                targets: 1, // tiempo
+                data: null,
+                render: function(data, type, row, meta) {
+                    if( data.alerta ) {
+                        return data.tiempo + ' <span style="color: red;" class="iconify" data-icon="mdi:flag"></span>';
+                    }
+                    return dataTable_funcs_remesas.texto_tiempo(data.tiempo, moment, "YYYY-MM-DD HH:mm");
+                }
+            },
+            {
+                targets: 2, // juzgado
+                data: null,
+                render: function(data, type, row, meta) {
+                    return dataTable_funcs_remesas.texto_con_tooltip(data.clave, data.nombre);
+                }
+            },
+            {
+                targets: 7, // estado
+                data: null,
+                render: function(data, type, row, meta) {
+                    let bgcolor = "";
+                    switch (data)    {
+                        case "PENDIENTE":       bgcolor = "bg-warning text-dark";   break;
+                        case "CANCELADO":       bgcolor = "bg-secondary";           break;
+                        case "ENVIADO":         bgcolor = "bg-pink";                break;
+                        case "ASIGNADO":        bgcolor = "bg-primary";             break;
+                        case "RECHAZADO":       bgcolor = "bg-danger";              break;
+                        case "ENCONTRADO":      bgcolor = "bg-purple";              break;
+                        case "ARCHIVADO":       bgcolor = "bg-success";             break;
+                        case "ARCHIVADO CON ANOMALIA":  bgcolor = "bg-teal";      break;
+                    }
+                    return '<span class="badge rounded-pill ' + bgcolor + '">' + data + '</span>';
+                }
+            },
+            {
+                targets: 8, // asignado
+                data: null,
+                render: function(data, type, row, meta) {
+                    return dataTable_funcs_remesas.texto_cortado(data.nombre);
+                }
+            }
+        ];
+        configDataTable_remesas['rowCallback'] = function(row, data) {
+            switch (data.estado)    {
+                case "PENDIENTE":       $(row).css("background-color", "#fef9e7");  break;
+                case "CANCELADO":       $(row).css("background-color", "#eeeeee");  break;
+                case "ENVIADO":         $(row).css("background-color", "#f7d6e6");  break;
+                case "ASIGNADO":        $(row).css("background-color", "#ebf5fb");  break;
+                case "RECHAZADO":       $(row).css("background-color", "#fdedec");  break;
+                case "ENCONTRADO":      $(row).css("background-color", "#f5eef8");  break;
+                case "ARCHIVADO":       $(row).css("background-color", "#d1e7dd");  break;
+                case "ARCHIVADO CON ANOMALIA": $(row).css("background-color", "#d2f4ea");  break;
+            }
+        };
+
+        // Declaración de los Filtros utilizados
+        // Creación del Objeto manejador de Filtros
+        const filtros_remesas = new Filtros('#arc_remesas_datatable', configDataTable_remesas);
+        // Añadimos los difrentes inputs utilizados
+        filtros_remesas.add_input('idInput_remesa', 'remesa_id');
+        filtros_remesas.add_input('anioInput_remesa', 'anio');
+        filtros_remesas.add_input('tipoDocumentoInput_remesa', 'arc_documento_tipo_id');
+        filtros_remesas.add_input('numOficioInput_remesa', 'num_oficio');
+        filtros_remesas.add_input('juzgadoInput_remesa', 'juzgado_id');
+        filtros_remesas.add_input('asignadoInput_remesa', 'asignado_id');
+        filtros_remesas.add_input('estadoSelect_remesa', 'estado');
+        // Precarga de los valores de los inputs mantenidos después de la carga de la página.
+        filtros_remesas.precarga();
+    </script>
+
+    <!-- Mostar historial -->
+    {% if mostrando_historial %}
+        <script>
+            $('.card-body').css('background-color', '#ced4da');
+            $('.card-header').addClass('bg-dark text-light');
+        </script>
+    {% endif %}
+    <!-- Select2 bootstrap -->
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script>
+        // Select2 para Juzgado Filtro Solicitudes
+        $(document).ready(function(){
+            $('#juzgadoInput_solicitud').select2({
+                // --- Carga de juzgados por Ajax --- //
+                ajax: {
+                    url: '/autoridades/juzgados_json',
+                    headers: { "X-CSRF-TOKEN": "{{ csrf_token() }}" },
+                    dataType: 'json',
+                    delay: 250,
+                    type: "POST",
+                    data: function (params) {
+                        return { 'clave': params.term.toUpperCase(), "es_archivo_solicitante": true };
+                    }
+                },
+                minimumInputLength: 3,
+                cache: false
+            });
+            // ---
+            $('#asignadoInput_solicitud').select2({
+                // --- Carga de juzgados por Ajax --- //
+                ajax: {
+                    url: '/usuarios_roles/usuarios_con_rol_json',
+                    headers: { "X-CSRF-TOKEN": "{{ csrf_token() }}" },
+                    dataType: 'json',
+                    delay: 250,
+                    type: "POST",
+                    data: function (params) {
+                        return { 'nombre_usuario': params.term.toUpperCase(), 'rol_nombre': "{{ rol_archivista }}" };
+                    }
+                },
+                minimumInputLength: 3,
+                cache: false
+            });
+        });
+    </script>
+    <script>
+        // Select2 para Juzgado Filtro Remesas
+        $(document).ready(function(){
+            $('#juzgadoInput_remesa').select2({
+                // --- Carga de juzgados por Ajax --- //
+                ajax: {
+                    url: '/autoridades/juzgados_json',
+                    headers: { "X-CSRF-TOKEN": "{{ csrf_token() }}" },
+                    dataType: 'json',
+                    delay: 250,
+                    type: "POST",
+                    data: function (params) {
+                        return { 'clave': params.term.toUpperCase(), "es_archivo_solicitante": true };
+                    }
+                },
+                minimumInputLength: 3,
+                cache: false
+            });
+            // ---
+            $('#asignadoInput_remesa').select2({
+                // --- Carga de juzgados por Ajax --- //
+                ajax: {
+                    url: '/usuarios_roles/usuarios_con_rol_json',
+                    headers: { "X-CSRF-TOKEN": "{{ csrf_token() }}" },
+                    dataType: 'json',
+                    delay: 250,
+                    type: "POST",
+                    data: function (params) {
+                        return { 'nombre_usuario': params.term.toUpperCase(), 'rol_nombre': "{{ rol_archivista }}" };
+                    }
+                },
+                minimumInputLength: 3,
+                cache: false
+            });
+            // ---
+            $(document).ready(function(){
+                $('#tipoDocumentoInput_remesa').addClass('js-example-placeholder-single');
+                $("#tipoDocumentoInput_remesa").select2({
+                    // --- Carga de emails por Ajax --- //
+                    ajax: {
+                        url: '/arc_documentos_tipos/tipos_documentos_json',
+                        headers: { "X-CSRF-TOKEN": "{{ csrf_token() }}" },
+                        dataType: 'json',
+                        delay: 250,
+                        type: "POST",
+                        data: function (params) {
+                            return { 'nombre': params.term.toUpperCase() };
+                        }
+                    },
+                    placeholder: "",
+                    minimumInputLength: 1,
+                    allowClear: true
+                });
+            });
+        });
+    </script>
+    {% if mostrar_btn_local_global == 'GLOBAL' %}
+    <script>
+        function seleccionar_sede() {
+            sede = document.getElementById('sedeSelect').value;
+            if (sede === "")    {
+                delete filtros_solicitudes.configDataTable.ajax.data['sede'];
+                delete filtros_remesas.configDataTable.ajax.data['sede'];
+            } else {
+                filtros_solicitudes.configDataTable.ajax.data['sede'] = sede;
+                filtros_remesas.configDataTable.ajax.data['sede'] = sede;
+            }
+            filtros_solicitudes.buscar();
+            filtros_remesas.buscar();
+        }
+    </script>
+    {% endif %}
+{% endblock %}
