@@ -53,13 +53,14 @@
 
 {% block custom_javascript %}
     <script>
+        const jsonFilePath = "/home/lucyaral/Documentos/json_docs/tickets_help.json";
         function get_url_json(){
             // json_url;
             switch(location.hostname){
-                case "localhost": return "http://localhost:8006/Documentos/json%20plataforma/tickets_help.json"; break;
-                case "172.30.37.233": return "http://localhost:8006/Documentos/json%20plataforma/tickets_help.json"; break;
-                case "127.0.0.1": return "http://localhost:8006/Documentos/json%20plataforma/tickets_help.json"; break;
-               default: return "Access-Control-Allow-Origin: https://storage.googleapis.com/pjecz-informatica/static/json/tickets_help.json/"; break;
+                case "localhost": return jsonFilePath; break;
+                case "127.0.0.1": return jsonFilePath; break;
+                //case "172.30.37.233": return "https://storage.cloud.google.com/pjecz-informatica/static/json/tickets_help.json"; break;
+               default: return "https://storage.cloud.google.com/pjecz-informatica/static/json/tickets_help.json"; break;
             }
             //return json_url;
         }

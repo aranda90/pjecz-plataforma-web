@@ -889,3 +889,13 @@ def recover(fin_vale_id):
         bitacora.save()
         flash(bitacora.descripcion, "success")
     return redirect(url_for("fin_vales.detail", fin_vale_id=fin_vale.id))
+
+
+@fin_vales.route("/fin_vales/manual")
+def manual():
+    """Manual de usuario"""
+    # URL externa a la que quieres redirigir
+    url_externa = "https://www.pjecz.gob.mx/pjecz-plataforma-web/fin_vales/"
+
+    # Redirige al usuario a la URL externa
+    return redirect(url_externa)

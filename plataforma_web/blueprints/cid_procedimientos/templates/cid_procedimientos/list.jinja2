@@ -1,8 +1,15 @@
 {% extends 'layouts/app.jinja2' %}
 {% import 'macros/list.jinja2' as list %}
 {% import 'macros/topbar.jinja2' as topbar %}
+{% import 'macros/accordion.jinja2' as accordion %}
 
 {% block title %}{{ titulo }}{% endblock %}
+
+{% block custom_head %}
+    <!-- traer css para diseño del botón help-->
+    <link href="{{ url_for('static', filename='css/quill.css') }}" rel="stylesheet" type="text/css"/>
+    <meta http-equiv="Content-Type" content="text/html">
+{% endblock %}
 
 {% block topbar_actions %}
     {% call topbar.page_buttons(titulo) %}
@@ -66,6 +73,8 @@
                 </tr>
             </thead>
         </table>
+        {{ accordion.btn_help('boton_ayuda','offcanvasExample','mdi:help','btn-flotante')}}
+        {{ accordion.container_help('offcanvasExample','p-descript')}}
     {% endcall %}
 {% endblock %}
 
@@ -199,5 +208,55 @@
             $('#cid_procedimientos_datatable').DataTable(configDataTable);
 
         }
+    </script>
+    <!-- Botón de ayuda -->
+    <script>
+       $("#boton_ayuda").click(function(){
+            const archivo = "../../../dcos/fin_vales.md";
+            $.ajax({
+                url:archivo,
+                type: "GET",
+                crossDomain: true,
+                dataType: 'json',
+                success: function(data){
+                    console.log(data);
+                    $("#offcanvasEdit").prepend(`
+                    <div class="offcanvas-header offcanvas-bg">
+                        <h5 class="offcanvas-title" id="siderbar-label">`+ data.titulo +`</h5>
+                        <button class="btn-close" type="button" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+                        
+                    </div><p class="p-descript">`+ data.descripcion +`</p>`);
+                    let status = "show";
+                    let expanded = "true";
+                    let collapsed = "";
+                    $("#accordion_container").html('<div class="accordion" id="accordionHelp">');
+                    console.log(data.secciones)
+                    data.secciones.map(function(seccion){
+                        $("#accordionHelp").append(`
+                             <div class="accordion-item">
+                                <h2 class="accordion-header accordion-color" id="heading_`+ seccion.id +`">
+                                    <button class="accordion-button fw-bolder `+ collapsed +`" type="button" data-bs-toggle="collapse" data-bs-target="#collapse_`+ seccion.id +`" aria-controls="collapse_`+ seccion.id +`" aria-expanded="`+ expanded +`">
+                                        `+ seccion.subtitulo +`
+                                    </button>
+                                </h2>
+                                <div id="collapse_`+ seccion.id +`" class="accordion-collapse collapse `+ status +`" aria-labelledby="heading_`+ seccion.id +`" data-bs-parent="#accordionHelp">
+                                    <div class="accordion-body help-body">
+                                        `+ seccion.descripcion +`
+                                    </div>
+                                </div>
+                            </div> 
+                        `);
+                        status = "";
+                        expanded = "false";
+                        collapsed = "collapsed";
+                    });
+                    $("accordion_container").html('</div>');
+
+                },
+                error: function(data){
+                    console.log(data);
+                }
+            });
+        });
     </script>
 {% endblock %}
