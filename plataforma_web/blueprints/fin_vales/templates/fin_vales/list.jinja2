@@ -1,5 +1,6 @@
 {% extends 'layouts/app.jinja2' %}
 {% import 'macros/list.jinja2' as list %}
+{% import 'macros/help.jinja2' as help %}
 {% import 'macros/topbar.jinja2' as topbar %}
 
 {% block title %}Vales{% endblock %}
@@ -44,6 +45,10 @@
             </thead>
         </table>
     {% endcall %}
+{% endblock %}
+
+{% block content_help %}
+    {{ help.help_button('https://www.pjecz.gob.mx/pjecz-plataforma-web/fin_vales/') }}
 {% endblock %}
 
 {% block custom_javascript %}

@@ -1,4 +1,5 @@
 {% extends 'layouts/app.jinja2' %}
+{% import 'macros/help.jinja2' as help %}
 {% import 'macros/list.jinja2' as list %}
 {% import 'macros/topbar.jinja2' as topbar %}
 
@@ -101,6 +102,11 @@
             </thead>
         </table>
     {% endcall %}
+{% endblock %}
+
+{# se manda llamar el botón de la ayuda  #}
+{% block content_help %}
+    {{ help.help_button('https://www.pjecz.gob.mx/pjecz-plataforma-web/arc_documentos/#listado-menu-superior') }}
 {% endblock %}
 
 {% block custom_javascript %}

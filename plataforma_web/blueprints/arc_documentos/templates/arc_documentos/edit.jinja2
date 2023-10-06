@@ -1,5 +1,6 @@
 {% extends 'layouts/app.jinja2' %}
 {% import 'macros/form.jinja2' as f with context %}
+{% import 'macros/help.jinja2' as help %}
 {% import 'macros/topbar.jinja2' as topbar %}
 
 {% block title %}Editar Expediente{% endblock %}
@@ -66,6 +67,11 @@
             {% call f.form_group(form.guardar) %}{% endcall %}
         {% endcall %}
     {% endcall %}
+{% endblock %}
+
+{# se manda llamar el botón de la ayuda  #}
+{% block content_help %}
+    {{ help.help_button('https://www.pjecz.gob.mx/pjecz-plataforma-web/arc_documentos/#editar-documento') }}
 {% endblock %}
 
 {% block custom_javascript %}
