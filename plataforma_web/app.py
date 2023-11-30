@@ -30,6 +30,7 @@ from plataforma_web.blueprints.cid_registros.views import cid_registros
 from plataforma_web.blueprints.distritos.views import distritos
 from plataforma_web.blueprints.domicilios.views import domicilios
 from plataforma_web.blueprints.edictos.views import edictos
+from plataforma_web.blueprints.edictos_acuses.views import edictos_acuses
 from plataforma_web.blueprints.entradas_salidas.views import entradas_salidas
 from plataforma_web.blueprints.epocas.views import epocas
 from plataforma_web.blueprints.est_variables.views import est_variables
@@ -66,6 +67,10 @@ from plataforma_web.blueprints.redams.views import redams
 from plataforma_web.blueprints.repsvm_agresores.views import repsvm_agresores
 from plataforma_web.blueprints.repsvm_agresores_delitos.views import repsvm_agresores_delitos
 from plataforma_web.blueprints.repsvm_delitos.views import repsvm_delitos
+from plataforma_web.blueprints.req_catalogos.views import req_catalogos
+from plataforma_web.blueprints.req_requisiciones.views import req_requisiciones
+from plataforma_web.blueprints.req_requisiciones_registros.views import req_requisiciones_registros
+from plataforma_web.blueprints.req_resguardos.views import req_resguardos
 from plataforma_web.blueprints.roles.views import roles
 from plataforma_web.blueprints.sentencias.views import sentencias
 from plataforma_web.blueprints.siga_bitacoras.views import siga_bitacoras
@@ -82,6 +87,7 @@ from plataforma_web.blueprints.tesis_jurisprudencias_sentencias.views import tes
 from plataforma_web.blueprints.ubicaciones_expedientes.views import ubicaciones_expedientes
 from plataforma_web.blueprints.usuarios.views import usuarios
 from plataforma_web.blueprints.usuarios_roles.views import usuarios_roles
+from plataforma_web.blueprints.usuarios_solicitudes.views import usuarios_solicitudes
 
 from plataforma_web.blueprints.usuarios.models import Usuario
 
@@ -122,6 +128,7 @@ def create_app():
     app.register_blueprint(distritos)
     app.register_blueprint(domicilios)
     app.register_blueprint(edictos)
+    app.register_blueprint(edictos_acuses)
     app.register_blueprint(entradas_salidas)
     app.register_blueprint(epocas)
     app.register_blueprint(est_informes)
@@ -158,6 +165,10 @@ def create_app():
     app.register_blueprint(repsvm_agresores)
     app.register_blueprint(repsvm_agresores_delitos)
     app.register_blueprint(repsvm_delitos)
+    app.register_blueprint(req_catalogos)
+    app.register_blueprint(req_requisiciones)
+    app.register_blueprint(req_requisiciones_registros)
+    app.register_blueprint(req_resguardos)
     app.register_blueprint(roles)
     app.register_blueprint(sentencias)
     app.register_blueprint(siga_bitacoras)
@@ -174,6 +185,7 @@ def create_app():
     app.register_blueprint(usuarios)
     app.register_blueprint(usuarios_roles)
     app.register_blueprint(ubicaciones_expedientes)
+    app.register_blueprint(usuarios_solicitudes)
     # Cargar las extensiones
     extensions(app)
     authentication(Usuario)
