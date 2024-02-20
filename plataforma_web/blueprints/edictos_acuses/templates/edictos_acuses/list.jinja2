@@ -4,6 +4,17 @@
 
 {% block title %}Acuses de Edictos{% endblock %}
 
+{% block custom_head %}
+   <style>
+        .disabled-link {
+            color: #999; /* Cambia el color del texto para indicar deshabilitado */
+            cursor: not-allowed; /* Cambia el cursor para indicar que no es clickeable */
+            text-decoration: none; /* Elimina cualquier decoración de enlace (subrayado) */
+            pointer-events: none; /* Deshabilita eventos de puntero (evita clics) */
+        }
+   </style>
+{% endblock %}
+
 {% block topbar_actions %}
     {% call topbar.page_buttons(titulo) %}
         {% if current_user.can_admin('EDICTOS ACUSES') %}
@@ -21,9 +32,9 @@
         <table id="edictos_acuses_datatable" class="table {% if estatus == 'B'%}table-dark{% endif %} display nowrap" style="width:100%">
             <thead>
                 <tr>
-                    <th>Fecha del acuse</th>
+                    <th>Fecha de publicación</th>
                     <th>Descripción del edicto</th>
-                    <th>Expediente</th>
+                    <th>Acuse de recepción</th>
                 </tr>
             </thead>
         </table>
@@ -38,14 +49,18 @@
         configDataTable['columns'] = [
             { data: 'detalle' },
             { data: 'edicto_descripcion' },
-            { data: 'edicto_expediente' },
+            { data: 'acuse_recepcion' },
         ];
         configDataTable['columnDefs'] = [
             {
-                targets: 0, // detalle
+                targets: 2, // acuse_recepcion
                 data: null,
                 render: function(data, type, row, meta) {
-                    return '<a href="' + data.url + '">' + data.fecha + '</a>';
+                    if(data === "No disponible"){
+                        return '<span class="disabled-link">Acuse recepción</span>'
+                    }else{
+                        return '<a href="' + data + '" target="_blank">Acuse recepción</a>';
+                    }
                 }
             }
         ];

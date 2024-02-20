@@ -1,12 +1,13 @@
 """
 Edictos, vistas
 """
+
 import datetime
 import json
 from pathlib import Path
 from urllib.parse import quote
 
-from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
+from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for, jsonify
 from flask_login import current_user, login_required
 from google.cloud import storage
 from werkzeug.datastructures import CombinedMultiDict
@@ -16,14 +17,16 @@ from lib.datatables import get_datatable_parameters, output_datatable_json
 from lib.exceptions import MyAnyError
 from lib.google_cloud_storage import get_blob_name_from_url, get_media_type_from_filename, get_file_from_gcs
 from lib.safe_string import safe_expediente, safe_message, safe_numero_publicacion, safe_string
+from lib.storage import GoogleCloudStorage, NotAllowedExtesionError, UnknownExtesionError, NotConfiguredError
 from lib.time_to_text import dia_mes_ano, mes_en_palabra
 from plataforma_web.blueprints.usuarios.decorators import permission_required
 
 from plataforma_web.blueprints.autoridades.models import Autoridad
 from plataforma_web.blueprints.bitacoras.models import Bitacora
 from plataforma_web.blueprints.distritos.models import Distrito
-from plataforma_web.blueprints.edictos.forms import EdictoEditForm, EdictoNewForm, EdictoSearchForm, EdictoSearchAdminForm
+from plataforma_web.blueprints.edictos.forms import EdictoEditForm, EdictoNewForm, EdictoNewNotariaForm, EdictoSearchForm, EdictoSearchAdminForm
 from plataforma_web.blueprints.edictos.models import Edicto
+from plataforma_web.blueprints.edictos_acuses.models import EdictoAcuse
 from plataforma_web.blueprints.modulos.models import Modulo
 from plataforma_web.blueprints.permisos.models import Permiso
 
@@ -33,13 +36,18 @@ MODULO = "EDICTOS"
 LIMITE_DIAS = 365  # Un anio
 LIMITE_ADMINISTRADORES_DIAS = 3650  # Administradores pueden manipular diez anios
 
+ROL_JUZGADO = "JUZGADO PRIMERA INSTANCIA"
+ROL_NOTARIA = "NOTARIA"
 
-@edictos.route("/edictos/acuses/<id_hashed>")
-def checkout(id_hashed):
+
+@edictos.route("/edictos/acuses/<id_hashed>/<edicto_acuse_id>")
+def checkout(id_hashed, edicto_acuse_id):
     """Acuse"""
     edicto = Edicto.query.get_or_404(Edicto.decode_id(id_hashed))
+    edicto_acuse = EdictoAcuse.query.get_or_404(edicto_acuse_id)
     dia, mes, anio = dia_mes_ano(edicto.creado)
-    return render_template("edictos/print.jinja2", edicto=edicto, dia=dia, mes=mes.upper(), anio=anio)
+    fecha_del_acuse = edicto_acuse.fecha
+    return render_template("edictos/print.jinja2", edicto=edicto, dia=dia, mes=mes.upper(), anio=anio, fecha_del_acuse=fecha_del_acuse)
 
 
 @edictos.before_request
@@ -62,10 +70,20 @@ def list_active():
             estatus="A",
         )
     # Si es jurisdiccional ve lo de su autoridad
-    if current_user.autoridad.es_jurisdiccional:
+    if current_user.autoridad.es_jurisdiccional and not current_user.autoridad.es_notaria:
         autoridad = current_user.autoridad
         return render_template(
             "edictos/list.jinja2",
+            autoridad=autoridad,
+            filtros=json.dumps({"autoridad_id": autoridad.id, "estatus": "A"}),
+            titulo=f"Edictos de {autoridad.distrito.nombre_corto}, {autoridad.descripcion_corta}",
+            estatus="A",
+        )
+    # Si es notaria ve lo de su autoridad
+    if current_user.autoridad.es_notaria:
+        autoridad = current_user.autoridad
+        return render_template(
+            "edictos/list_notarias.jinja2",
             autoridad=autoridad,
             filtros=json.dumps({"autoridad_id": autoridad.id, "estatus": "A"}),
             titulo=f"Edictos de {autoridad.distrito.nombre_corto}, {autoridad.descripcion_corta}",
@@ -89,10 +107,20 @@ def list_inactive():
             estatus="B",
         )
     # Si es jurisdiccional ve lo de su autoridad
-    if current_user.autoridad.es_jurisdiccional:
+    if current_user.autoridad.es_jurisdiccional and not current_user.autoridad.es_notaria:
         autoridad = current_user.autoridad
         return render_template(
             "edictos/list.jinja2",
+            autoridad=autoridad,
+            filtros=json.dumps({"autoridad_id": autoridad.id, "estatus": "B"}),
+            titulo=f"Edictos inactivos de {autoridad.distrito.nombre_corto}, {autoridad.descripcion_corta}",
+            estatus="B",
+        )
+    # Si es notaria ve lo de su autoridad
+    if current_user.autoridad.es_notaria:
+        autoridad = current_user.autoridad
+        return render_template(
+            "edictos/list_notarias.jinja2",
             autoridad=autoridad,
             filtros=json.dumps({"autoridad_id": autoridad.id, "estatus": "B"}),
             titulo=f"Edictos inactivos de {autoridad.distrito.nombre_corto}, {autoridad.descripcion_corta}",
@@ -146,6 +174,8 @@ def list_autoridad_edictos_inactive(autoridad_id):
     autoridad = Autoridad.query.get_or_404(autoridad_id)
     if current_user.can_admin("EDICTOS"):
         plantilla = "edictos/list_admin.jinja2"
+    elif current_user.can_edit("EDICTOS"):
+        plantilla = "edictos/list_notarias.jinja2"
     else:
         plantilla = "edictos/list.jinja2"
     return render_template(
@@ -387,7 +417,11 @@ def refresh(autoridad_id):
 @edictos.route("/edictos/<int:edicto_id>")
 def detail(edicto_id):
     """Detalle de un Edicto"""
+    current_user_roles = current_user.get_roles()
     edicto = Edicto.query.get_or_404(edicto_id)
+    fecha_actual = datetime.datetime.now()
+    if ROL_NOTARIA in current_user_roles:
+        return render_template("edictos/detail_notaria.jinja2", edicto=edicto, fecha_actual=fecha_actual)
     return render_template("edictos/detail.jinja2", edicto=edicto)
 
 
@@ -409,11 +443,24 @@ def new_success(edicto):
     return bitacora
 
 
+def new_notaria_success(edicto):
+    """Mensaje de éxito en nuevo edicto"""
+    piezas = ["Nuevo edicto"]
+    piezas.append(f"fecha {edicto.fecha.strftime('%Y-%m-%d')} de {edicto.autoridad.clave}")
+    bitacora = Bitacora(
+        modulo=Modulo.query.filter_by(nombre=MODULO).first(),
+        usuario=current_user,
+        descripcion=safe_message(" ".join(piezas)),
+        url=url_for("edictos.detail", edicto_id=edicto.id),
+    )
+    bitacora.save()
+    return bitacora
+
+
 @edictos.route("/edictos/nuevo", methods=["GET", "POST"])
 @permission_required(MODULO, Permiso.CREAR)
 def new():
     """Subir Edicto como juzgado"""
-
     # Para validar la fecha
     hoy = datetime.date.today()
     hoy_dt = datetime.datetime(year=hoy.year, month=hoy.month, day=hoy.day)
@@ -522,6 +569,144 @@ def new():
     return render_template("edictos/new.jinja2", form=form)
 
 
+@edictos.route("/edictos/nuevo/notaria", methods=["GET", "POST"])
+@permission_required(MODULO, Permiso.CREAR)
+def new_for_notaria():
+    """Subir Edicto para una notaria"""
+
+    # Para validar la fecha
+    hoy = datetime.date.today()
+    hoy_dt = datetime.datetime(year=hoy.year, month=hoy.month, day=hoy.day)
+    limite_dt = hoy_dt + datetime.timedelta(days=-LIMITE_DIAS)
+
+    # Validar autoridad
+    autoridad = current_user.autoridad
+    if autoridad is None:
+        flash("El juzgado/autoridad no existe.", "warning")
+        return redirect(url_for("edictos.list_active"))
+    if autoridad.estatus != "A":
+        flash("El juzgado/autoridad no es activa.", "warning")
+        return redirect(url_for("autoridades.detail", autoridad_id=autoridad.id))
+    if not autoridad.distrito.es_distrito_judicial:
+        flash("El juzgado/autoridad no está en un distrito jurisdiccional.", "warning")
+        return redirect(url_for("autoridades.detail", autoridad_id=autoridad.id))
+    if not autoridad.es_notaria:
+        flash("El juzgado/autoridad no es notaria.", "warning")
+        return redirect(url_for("autoridades.detail", autoridad_id=autoridad.id))
+    if autoridad.directorio_edictos is None or autoridad.directorio_edictos == "":
+        flash("El juzgado/autoridad no tiene directorio para edictos.", "warning")
+        return redirect(url_for("autoridades.detail", autoridad_id=autoridad.id))
+
+    # Si viene el formulario
+    form = EdictoNewNotariaForm(CombinedMultiDict((request.files, request.form)))
+    if form.validate_on_submit():
+        # filtrar_acuse_dates(form)
+        # Validar fecha
+        fecha = form.fecha.data
+        if not limite_dt <= datetime.datetime(year=fecha.year, month=fecha.month, day=fecha.day) <= hoy_dt:
+            # if not limite_dt <= fecha <= hoy_dt.date():
+            flash(f"La fecha no debe ser del futuro ni anterior a {LIMITE_DIAS} días.", "warning")
+            form.fecha.data = hoy
+            return render_template("edictos/new_for_notaria.jinja2", form=form)
+
+        # Validar descripcion
+        descripcion = safe_string(form.descripcion.data)
+        if descripcion == "":
+            flash("La descripción es incorrecta.", "warning")
+            return render_template("edictos/new_for_notaria.jinja2", form=form)
+
+        try:
+            acuse_num = int(form.acuse_num.data)
+        except ValueError:
+            flash("Especificar una cantidad publicaciones válida.", "warning")
+            return render_template("edictos/new_for_notaria.jinja2", form=form)
+
+        # Validar archivo
+        archivo = request.files.get("archivo")
+        if not archivo or archivo.filename == "":
+            flash("Archivo requerido.", "warning")
+            return render_template("edictos/new_for_notaria.jinja2", form=form)
+        if "." not in archivo.filename or archivo.filename.rsplit(".", 1)[1] != "pdf":
+            flash("No es un archivo PDF.", "warning")
+            return render_template("edictos/new_for_notaria.jinja2", form=form)
+
+        # Establecer como republicado si la fecha es posterior a hoy
+        fecha_actual = datetime.date.today()
+        fecha_edicto = form.fecha.data
+        republicado = fecha_edicto > fecha_actual
+
+        # Verifica si la fecha del edicto es igual a la fecha actual
+        if fecha == hoy:
+            # Insertar registro
+            edicto = Edicto(
+                autoridad=autoridad,
+                fecha=fecha,
+                acuse_num=acuse_num,
+                descripcion=descripcion,
+                republicado=republicado,
+            )
+            edicto.save()
+
+        # Obtener la cantidad de acuses seleccionados
+        try:
+            acuse_num = int(form.acuse_num.data)
+        except (ValueError, TypeError):
+            flash("Especificar una cantidad de publicaciones.", "warning")
+            return render_template("edictos/new_for_notaria.jinja2", form=form)
+
+        # Insertar las fechas de acuses ingresadas manualmente por el usuario
+        nuevas_fechas_acuses = [getattr(form, f"fecha_acuse_{i}").data for i in range(1, acuse_num + 1)]
+        for fecha_acuse in nuevas_fechas_acuses:
+            if fecha_acuse is not None:  # Verificar que la fecha no sea None
+                acuse = EdictoAcuse(
+                    edicto_id=edicto.id,
+                    fecha=fecha_acuse,
+                )
+                acuse.save()
+        url = ""
+        # Elaborar nombre del archivo
+        fecha_str = fecha.strftime("%Y-%m-%d")
+        elementos = [fecha_str]
+        elementos.append(safe_string(descripcion, max_len=64).replace(" ", "-"))
+        elementos.append(edicto.encode_id())
+        archivo_str = "-".join(elementos) + ".pdf"
+
+        # Elaborar ruta Autoridad/YYYY/MES/archivo.pdf
+        ano_str = fecha.strftime("%Y")
+        mes_str = mes_en_palabra(fecha.month)
+        ruta_str = str(Path(autoridad.directorio_edictos, ano_str, mes_str, archivo_str))
+
+        # Subir el archivo
+        try:
+            deposito = current_app.config["CLOUD_STORAGE_DEPOSITO_EDICTOS"]
+            storage_client = storage.Client()
+            bucket = storage_client.bucket(deposito)
+            blob = bucket.blob(ruta_str)
+            blob.upload_from_string(archivo.stream.read(), content_type="application/pdf")
+            url = blob.public_url
+        except NotConfiguredError:
+            flash("No se ha configurado el almacenamiento en la nube.", "warning")
+        except Exception:
+            # Manejar la excepción de alguna manera, como imprimir un mensaje de error
+            flash(f"Ocurrió un error durante la carga del archivo: {edicto.archivo}", "warning")
+
+        # Actualizar el nombre del archivo y el url
+        edicto.archivo = archivo_str
+        edicto.url = url
+        edicto.save()
+
+        # Mostrar mensaje de éxito e ir al detalle
+        bitacora = new_notaria_success(edicto)
+        flash(bitacora.descripcion, "success")
+        return redirect(bitacora.url)
+
+    # Prellenado de los campos
+    form.distrito.data = autoridad.distrito.nombre
+    form.autoridad.data = autoridad.descripcion
+    form.fecha.data = hoy
+    return render_template("edictos/new_for_notaria.jinja2", form=form)
+
+
 @edictos.route("/edictos/nuevo/<int:autoridad_id>", methods=["GET", "POST"])
 @permission_required(MODULO, Permiso.ADMINISTRAR)
 def new_for_autoridad(autoridad_id):
@@ -596,7 +781,6 @@ def new_for_autoridad(autoridad_id):
             numero_publicacion=numero_publicacion,
         )
         edicto.save()
-
         # Elaborar nombre del archivo
         fecha_str = fecha.strftime("%Y-%m-%d")
         elementos = [fecha_str]
@@ -645,6 +829,20 @@ def edit_success(edicto):
         piezas.append(f"expediente {edicto.expediente},")
     if edicto.numero_publicacion != "":
         piezas.append(f"número {edicto.numero_publicacion},")
+    piezas.append(f"fecha {edicto.fecha.strftime('%Y-%m-%d')} de {edicto.autoridad.clave}")
+    bitacora = Bitacora(
+        modulo=Modulo.query.filter_by(nombre=MODULO).first(),
+        usuario=current_user,
+        descripcion=safe_message(" ".join(piezas)),
+        url=url_for("edictos.detail", edicto_id=edicto.id),
+    )
+    bitacora.save()
+    return bitacora
+
+
+def edit_notaria_success(edicto):
+    """Mensaje de éxito al editar un edicto para notaria"""
+    piezas = ["Editado edicto"]
     piezas.append(f"fecha {edicto.fecha.strftime('%Y-%m-%d')} de {edicto.autoridad.clave}")
     bitacora = Bitacora(
         modulo=Modulo.query.filter_by(nombre=MODULO).first(),

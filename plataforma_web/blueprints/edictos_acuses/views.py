@@ -1,15 +1,19 @@
 """
 Edictos Acuses, vistas
 """
+
 import json
+from datetime import datetime
+from urllib.parse import quote
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from lib.datatables import get_datatable_parameters, output_datatable_json
-from lib.safe_string import safe_string, safe_message
 
-from plataforma_web.blueprints.bitacoras.models import Bitacora
-from plataforma_web.blueprints.modulos.models import Modulo
+# from lib.safe_string import safe_string, safe_message
+
+# from plataforma_web.blueprints.bitacoras.models import Bitacora
+# from plataforma_web.blueprints.modulos.models import Modulo
 from plataforma_web.blueprints.permisos.models import Permiso
 from plataforma_web.blueprints.usuarios.decorators import permission_required
 from plataforma_web.blueprints.edictos_acuses.models import EdictoAcuse
@@ -44,14 +48,20 @@ def datatable_json():
     # Elaborar datos para DataTable
     data = []
     for resultado in registros:
+        url_resultado = "Ver edicto"
+        if resultado.fecha <= datetime.now().date():
+            url_resultado = url_for("edictos.checkout", id_hashed=resultado.edicto.encode_id(), edicto_acuse_id=resultado.id)
+        else:
+            url_resultado = "No disponible"
+
         data.append(
             {
                 "detalle": {
-                    "fecha": resultado.fecha,
+                    "fecha": resultado.fecha.strftime("%Y-%m-%d"),
                     "url": url_for("edictos_acuses.detail", edicto_acuse_id=resultado.id),
                 },
                 "edicto_descripcion": resultado.edicto.descripcion,
-                "edicto_expediente": resultado.edicto.expediente,
+                "acuse_recepcion": url_resultado,
             }
         )
     # Entregar JSON
@@ -64,7 +74,7 @@ def list_active():
     return render_template(
         "edictos_acuses/list.jinja2",
         filtros=json.dumps({"estatus": "A"}),
-        titulo="Edictos Acuses",
+        titulo="Edictos publicados",
         estatus="A",
     )
 
@@ -84,5 +94,5 @@ def list_inactive():
 @edictos_acuses.route("/edictos_acuses/<int:edicto_acuse_id>")
 def detail(edicto_acuse_id):
     """Detalle de un Edicto Acuse"""
-    edictos_acuse = EdictoAcuse.query.get_or_404(edicto_acuse_id)
-    return render_template("edictos_acuses/detail.jinja2", edictos_acuse=edictos_acuse)
+    edicto_acuse = EdictoAcuse.query.get_or_404(edicto_acuse_id)
+    return render_template("edictos_acuses/detail.jinja2", edicto_acuse=edicto_acuse)

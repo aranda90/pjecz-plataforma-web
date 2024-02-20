@@ -1,6 +1,7 @@
 """
 Edictos, modelos
 """
+
 from urllib.parse import quote
 
 from lib.universal_mixin import UniversalMixin
@@ -30,6 +31,7 @@ class Edicto(db.Model, UniversalMixin):
 
     # Columnas nuevas
     acuse_num = db.Column(db.Integer)
+    republicado = db.Column(db.Boolean, default=False)  # Campo para indicar si el edicto está programado para el futuro
 
     # Hijos
     edictos_acuses = db.relationship("EdictoAcuse", back_populates="edicto")

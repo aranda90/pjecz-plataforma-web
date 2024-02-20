@@ -1,0 +1,108 @@
+{% extends 'layouts/app.jinja2' %}
+{% import 'macros/detail.jinja2' as detail %}
+{% import 'macros/modals.jinja2' as modals %}
+{% import 'macros/topbar.jinja2' as topbar %}
+
+{% block title %}Edicto{% endblock %}
+
+{% block custom_head %}
+   <style>
+        .disabled-link {
+            color: #999; /* Cambia el color del texto para indicar deshabilitado */
+            cursor: not-allowed; /* Cambia el cursor para indicar que no es clickeable */
+            text-decoration: none; /* Elimina cualquier decoración de enlace (subrayado) */
+            pointer-events: none; /* Deshabilita eventos de puntero (evita clics) */
+        }
+   </style>
+{% endblock %}
+
+{% block topbar_actions %}
+    {% call topbar.page_buttons('Edicto VPE' + edicto.id | string ) %}
+        {% if current_user.can_admin('EDICTOS') %}
+            {{ topbar.button_previous('Edictos de ' + edicto.autoridad.clave, url_for('edictos.list_autoridad_edictos', autoridad_id=edicto.autoridad_id)) }}
+        {% else %}
+            {{ topbar.button_previous('Edictos', url_for('edictos.list_active')) }}
+        {% endif %}
+        {% if current_user.can_admin('EDICTOS') %}
+            {{ topbar.button_upload('Subir', url_for('edictos.new_for_autoridad', autoridad_id=edicto.autoridad_id)) }}
+        {% elif current_user.can_insert('EDICTOS') and current_user.autoridad_id == edicto.autoridad_id %}
+            {{ topbar.button_upload('Subir', url_for('edictos.new_for_notaria')) }}
+        {% endif %}
+        {% if current_user.can_admin('EDICTOS') or (current_user.can_edit('EDICTOS') and edicto.autoridad_id == current_user.autoridad_id) %}
+            {{ topbar.button_edit('Editar', url_for('edictos.edit', edicto_id=edicto.id)) }}
+            {% if edicto.estatus == 'A' %}{{ topbar.button_delete('Eliminar', url_for('edictos.delete', edicto_id=edicto.id)) }}{% endif %}
+            {% if edicto.estatus == 'B' %}{{ topbar.button_recover('Recuperar', url_for('edictos.recover', edicto_id=edicto.id)) }}{% endif %}
+        {% endif %}
+    {% endcall %}
+{% endblock %}
+
+{% block content %}
+    {% call detail.card(estatus=edicto.estatus) %}
+        {{ detail.label_value_big('Descripción', edicto.descripcion) }}
+        {{ detail.label_value('Distrito', edicto.autoridad.distrito.nombre) }}
+        {{ detail.label_value('Autoridad', edicto.autoridad.descripcion) }}
+        {{ detail.label_value('Cantidad de publicaciones', edicto.acuse_num) }}
+        {{ detail.label_value_new_tab('Enlace público para descargar PDF', edicto.descargar_url, edicto.descargar_url) }}
+        {% if current_user.can_admin('EDICTOS') %}
+            {{ detail.label_value_new_tab('Descargar como administrador PDF', edicto.archivo, url_for('edictos.download', url=edicto.url)) }}
+        {% endif %}
+        {# {{ detail.label_value_new_tab('Acuse', 'De clic aqui', url_for('edictos.checkout', id_hashed=edicto.encode_id())) }} #}
+        {{ detail.label_value('Creado', moment(edicto.creado).format('llll')) }}
+    {% endcall %}
+    {# Listado de acuses #}
+    {% if current_user.can_view('EDICTOS ACUSES') %}
+        {% call detail.card('Edictos Acuses' ) %}
+            <table id="edictos_acuses_datatable" class="table display nowrap" style="width:100%">
+                <thead>
+                    <tr>
+                        <th>Fecha de publicación</th>
+                        <th>Descripción del edicto</th>
+                        <th>Archivo</th>
+                    </tr>
+                </thead>
+            </table>
+        {% endcall %}
+    {% endif %}
+{% endblock %}
+
+{% block custom_javascript %}
+    {% if current_user.can_admin('EDICTOS') or (current_user.can_edit('EDICTOS') and edicto.autoridad_id == current_user.autoridad_id) %}
+        {% if edicto.estatus == 'A' %}{{ modals.custom_javascript_delete('Eliminar', '¿Eliminar a ' + edicto.descripcion + '?') }}{% endif %}
+        {% if edicto.estatus == 'B' %}{{ modals.custom_javascript_recover('Recuperar', '¿Recuperar a ' + edicto.descripcion + '?') }}{% endif %}
+    {% endif %}
+    {{ detail.config_datatable() }}
+    {% if current_user.can_view('EDICTOS ACUSES') %}
+        <script>
+            configDataTable['ajax']['url'] = '/edictos_acuses/datatable_json';
+            configDataTable['ajax']['data'] = { 'estatus': "A", 'edicto_id': {{ edicto.id}} };
+            configDataTable['columns'] = [
+                { data: 'detalle' },
+                { data: 'edicto_descripcion' },
+                { data: 'acuse_recepcion' },
+            ];
+            configDataTable['columnDefs'] = [
+                {
+                    targets: 0, // detalle
+                    data: null,
+                    render: function(data, type, row, meta) {
+                        return data.fecha;
+                    }
+                },
+                {
+                    targets: 2, // acuse_recepcion
+                    data: null,
+                    render: function(data, type, row, meta) {
+                        if(data === "No disponible"){
+                            return '<span class="disabled-link">Acuse recepción</span>'
+                        }else{
+                            return '<a href="' + data + '" target="_blank">Acuse recepción</a>';
+                        }
+                    }
+                
+                }
+            ];
+            $('#edictos_acuses_datatable').DataTable(configDataTable);
+        </script>
+    {% endif %}
+    {{ detail.moment_js(moment) }}
+{% endblock %}

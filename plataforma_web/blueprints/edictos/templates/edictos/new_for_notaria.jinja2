@@ -1,0 +1,65 @@
+{% extends 'layouts/app.jinja2' %}
+{% import 'macros/form.jinja2' as f with context %}
+{% import 'macros/topbar.jinja2' as topbar %}
+
+{% block title %}Subir Edicto notaria{% endblock %}
+
+{% block custom_head %}
+    {{ f.drop_zone_css() }}
+    <style>
+        .radiobutton_inline { display: flex; }
+    </style>
+{% endblock %}
+
+{% block topbar_actions %}
+    {{ topbar.page('Subir Edicto notaria') }}
+{% endblock %}
+
+{% block content %}
+    {% call f.card() %}
+        {% call f.form_tag_multipart('edictos.new_for_notaria', fid='edicto_form') %}
+            {% call f.form_group(form.fecha, readonly=true, type="hidden") %}{% endcall %}
+            {% call f.form_group(form.acuse_num, css_class="radiobutton_inline mi_acuse") %}{% endcall %}
+            {% for i in range(1,6) %}
+                <div id="fecha_acuse_titulo_{{ i }}" class="fecha-acuse-titulo" style="display: none;">
+                    <label for="fecha_acuse_{{ i }}">Fecha Publicacion</label>
+                </div>
+                {% call f.form_group(form['fecha_acuse_' + i|string], id='fecha_acuse_' + i|string, class="fecha-acuse form-control", style='display:none;') %}{% endcall %}
+            {% endfor %}
+            {% call f.form_group(form.descripcion) %}{% endcall %}
+            {% call f.drop_zone_wrapper() %}
+                {% call f.form_group(form.archivo, class="dropzone") %}{% endcall %}
+            {% endcall %}
+            {% call f.form_group(form.guardar) %}{% endcall %}
+        {% endcall %}
+    {% endcall %}
+{% endblock %}
+
+{% block custom_javascript %}
+    {{ f.drop_zone_js() }}
+    <script>
+        $(document).ready(function(){
+            $('.mi_acuse').change(function(){
+                var numAcuses = $('input[name="acuse_num"]:checked').val();
+                $('.fecha-acuse-titulo').hide() // Ocultar todos los titulos
+                $('.fecha-acuse').hide(); // Ocultar todos los campos de fecha
+                // Muestra los titulos y campos de fecha según la cantidad seleccionada
+                for(var i = 1; i <= numAcuses; i++){
+                    $("#fecha_acuse_titulo" + i).show();
+                    $("#fecha_acuse_" + i).show();
+                }
+
+                // Setear la primer fecha como la fecha actual
+                $("fecha_acuse_1").val(getFormattedDate(new Date()));
+            });
+
+            // Funcion para obtener la fecha en formato "yyyy-mm-dd"
+            function getFormattedDate(date){
+                var year = date.getFullYear();
+                var month = (1 + date.getMonth().toString().padStart(2,'0'));
+                var day = date.getDate().toString().padStart(2, '0');
+                return year + '-' + month + '-' + day;
+            }
+        });
+    </script>
+{% endblock %}

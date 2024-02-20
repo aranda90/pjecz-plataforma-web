@@ -5,6 +5,17 @@
 
 {% block title %}Acuse de Edicto{% endblock %}
 
+{% block custom_head %}
+   <style>
+        .disabled-link {
+            color: #999; /* Cambia el color del texto para indicar deshabilitado */
+            cursor: not-allowed; /* Cambia el cursor para indicar que no es clickeable */
+            text-decoration: none; /* Elimina cualquier decoración de enlace (subrayado) */
+            pointer-events: none; /* Deshabilita eventos de puntero (evita clics) */
+        }
+   </style>
+{% endblock %}
+
 {% block topbar_actions %}
     {% call topbar.page_buttons('Acuse de Edicto') %}
         {{ topbar.button_previous('Acuses de Edictos', url_for('edictos_acuses.list_active')) }}
@@ -18,21 +29,35 @@
 
 {% block content %}
     {% call detail.card(estatus=edicto_acuse.estatus) %}
-        {{ detail.label_value_big('Fecha del acuse', edicto_acuse.fecha) }}
         {% if current_user.can_view('EDICTOS') %}
-            {{ detail.label_value('Descripción', edicto_acuse.columna_1, url_for('edictos.detail', edicto_id=edictos_acuses.edicto_id)) }}
+            {{ detail.label_value('Descripción', edicto_acuse.edicto.descripcion, url_for('edictos.detail', edicto_id=edicto_acuse.edicto_id)) }}
         {% else %}
-            {{ detail.label_value('Descripción', edicto_acuse.columna_1) }}
+            {{ detail.label_value('Descripción', edicto_acuse.edicto.descripcion) }}
         {% endif %}
-        {{ detail.label_value('No. de expediente', edicto_acuse.columna_2) }}
+        {# Obtener la fecha actual #}
+        {% if edicto_acuse.fecha <= now.date() %}
+            {{ detail.label_value_new_tab('Acuse', 'De clic aqui', url_for('edictos.checkout', id_hashed=edicto_acuse.edicto.encode_id(), edicto_acuse_id=edicto_acuse.id))}}
+        {% else %}
+            <div class="row">
+                <div class="col-md-3 text-end">
+                    Acuse
+                </div>
+                <div class="col-md-9">
+                    <a href="{{ url_for('edictos.checkout', id_hashed=edicto_acuse.edicto.encode_id(), edicto_acuse_id=edicto_acuse.id) }}" 
+                        class="disabled-link"  {% if edicto_acuse.fecha != now.date() %}disabled{% endif %}>
+                        De clic aquí
+                    </a>
+                </div>
+            </div>
+        {% endif %}
         {{ detail.label_value('Creado', moment(edicto_acuse.creado, local=True).format('DD MMM YYYY')) }}
     {% endcall %}
 {% endblock %}
 
 {% block custom_javascript %}
     {% if current_user.can_admin('EDICTOS ACUSES') %}
-        {% if edicto_acuse.estatus == 'A' %}{{ modals.custom_javascript_delete('Eliminar', '¿Eliminar a ' + edicto_acuse.fecha + '?') }}{% endif %}
-        {% if edicto_acuse.estatus == 'B' %}{{ modals.custom_javascript_recover('Recuperar', '¿Recuperar a ' + edicto_acuse.fecha + '?') }}{% endif %}
+        {% if edicto_acuse.estatus == 'A' %}{{ modals.custom_javascript_delete('Eliminar', '¿Eliminar a ' + edicto_acuse.fecha | string + '?') }}{% endif %}
+        {% if edicto_acuse.estatus == 'B' %}{{ modals.custom_javascript_recover('Recuperar', '¿Recuperar a ' + edicto_acuse.fecha | string + '?') }}{% endif %}
     {% endif %}
     {{ detail.moment_js(moment) }}
 {% endblock %}
