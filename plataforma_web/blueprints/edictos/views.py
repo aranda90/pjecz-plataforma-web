@@ -40,8 +40,16 @@ ROL_JUZGADO = "JUZGADO PRIMERA INSTANCIA"
 ROL_NOTARIA = "NOTARIA"
 
 
+@edictos.route("/edictos/acuses/<id_hashed>")
+def checkout(id_hashed):
+    """Acuse"""
+    edicto = Edicto.query.get_or_404(Edicto.decode_id(id_hashed))
+    dia, mes, anio = dia_mes_ano(edicto.creado)
+    return render_template("edictos/print.jinja2", edicto=edicto, dia=dia, mes=mes.upper(), anio=anio)
+
+
 @edictos.route("/edictos/acuses/<id_hashed>/<edicto_acuse_id>")
-def checkout(id_hashed, edicto_acuse_id):
+def checkoutNotaria(id_hashed, edicto_acuse_id):
     """Acuse"""
     edicto = Edicto.query.get_or_404(Edicto.decode_id(id_hashed))
     edicto_acuse = EdictoAcuse.query.get_or_404(edicto_acuse_id)
@@ -525,6 +533,7 @@ def new():
             descripcion=descripcion,
             expediente=expediente,
             numero_publicacion=numero_publicacion,
+            edicto_id_original=0,
         )
         edicto.save()
 
@@ -630,11 +639,6 @@ def new_for_notaria():
             flash("No es un archivo PDF.", "warning")
             return render_template("edictos/new_for_notaria.jinja2", form=form)
 
-        # Establecer como republicado si la fecha es posterior a hoy
-        fecha_actual = datetime.date.today()
-        fecha_edicto = form.fecha.data
-        republicado = fecha_edicto > fecha_actual
-
         # Verifica si la fecha del edicto es igual a la fecha actual
         if fecha == hoy:
             # Insertar registro
@@ -643,7 +647,7 @@ def new_for_notaria():
                 fecha=fecha,
                 acuse_num=acuse_num,
                 descripcion=descripcion,
-                republicado=republicado,
+                edicto_id_original=0,
             )
             edicto.save()
 
@@ -791,6 +795,7 @@ def new_for_autoridad(autoridad_id):
             descripcion=descripcion,
             expediente=expediente,
             numero_publicacion=numero_publicacion,
+            edicto_id_original=0,
         )
         edicto.save()
         # Elaborar nombre del archivo

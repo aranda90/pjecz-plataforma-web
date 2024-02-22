@@ -1,5 +1,12 @@
+"""
+Edictos Acuses
+
+- republicar: Republicar edictos para hoy o la fecha dada
+"""
+
 from datetime import datetime
 import logging
+import sys
 
 import click
 
@@ -20,66 +27,74 @@ bitacora.addHandler(empunadura)
 
 
 @click.group()
-def cli():
+def cli(ctx):
     """Edictos"""
 
 
 @click.command()
-def republicar():
-    """Republicar edictos para la fecha actual"""
+@click.option("--fecha", default=None, help="Fecha de republicacion")
+@click.pass_context
+def republicar(ctx, fecha):
+    """Republicar edictos para hoy o la fecha dada"""
 
-    # Obtener la fecha de hoy
-    fecha_actual = datetime.now().date()
+    # Si no se proporciona la fecha, por defecto se obtiene la fecha de hoy
+    if fecha is None:
+        fecha = datetime.now().date()
 
-    try:
-        # Consultar EdictoAcuse, filtrado por la fecha de hoy
-        edictos_acuses_hoy = EdictoAcuse.query.filter_by(fecha=fecha_actual).all()
+    # Consultar EdictoAcuse, filtrado por la fecha
+    edictos_acuses = EdictoAcuse.query.filter_by(fecha=fecha).filter_by(estatus="A").all()
 
-        # Inicializar un contador de republicaciones
-        contador = 0
-        # Ciclo por cada EdictoAcuse de hoy
-        for edicto_acuse in edictos_acuses_hoy:
-            # Consultar si el edicto ya está republicado para hoy
-            if Edicto.query.filter_by(id=edicto_acuse.edicto_id, fecha=fecha_actual, estatus="A").first():
-                bitacora.info(f"El edicto con ID %s {edicto_acuse.edicto_id} ya está republicado para hoy")
-                continue
+    # Si no hay acuses para la fecha, mostrar mensaje y terminar
+    if edictos_acuses is None:
+        mensaje = f"No hay edictos para republicar para {fecha}"
+        click.echo(mensaje)
+        bitacora.info(mensaje)
+        sys.exit(0)
 
-            # Se obtiene el Edicto original asociado al EdictoAcuse
-            edicto = Edicto.query.get(edicto_acuse.edicto_id)
-            if not edicto:
-                bitacora.error(f"No se encontró el Edicto con ID %s {edicto_acuse.edicto_id}")
-                continue
+    # Inicializar un contador de republicaciones
+    contador = 0
 
-            # Comprueba si ya existe una republicación para el edicto actual con la misma descripción y para la fecha actual.
-            # Si existe, registra un mensaje en la bitácora y continua con el siguiente edicto.
-            if Edicto.query.filter_by(fecha=fecha_actual, descripcion=edicto.descripcion, republicado=True).first():
-                bitacora.info(f"Ya existe una republicación para el edicto con ID %s {edicto.id} y descripción '{edicto.descripcion}' para hoy")
-                continue
+    # Ciclo por cada EdictoAcuse de hoy
+    for edicto_acuse in edictos_acuses:
 
-            # Crear una copia del edicto republicado con un nuevo ID
-            nuevo_edicto = Edicto(
-                fecha=fecha_actual,
-                descripcion=edicto.descripcion,
-                archivo=edicto.archivo,
-                url=edicto.url,
-                republicado=True,
-                autoridad_id=edicto.autoridad_id,
-            )
-            nuevo_edicto.save()
-            print(f"Nuevo edicto republicado: {nuevo_edicto} con ID {nuevo_edicto.id}")
-            click.echo(f"se republico {nuevo_edicto}")
-            contador += 1
-            # Se crea una copia del Edicto original con un nuevo ID y se marca como republicado.
+        # Para evitar que se republique mas de una vez
+        # consultar los Edictos tomando el edicto_id_original y la fecha
+        edictos_posibles = Edicto.query.filter_by(edicto_id_original=edicto_acuse.edicto_id).filter_by(fecha=fecha).filter_by(estatus="A").all()
 
-        # Mostrar un mensaje de término
-        mensaje = f"Republicados {contador} edictos para hoy ({fecha_actual})"
+        # Si SI se encontraron edictos_posibles, se omite porque ya estan republicados
+        if edictos_posibles is not None:
+            mensaje = f"Ya se republicaron los edictos para ID {edicto_acuse.edicto_id} del {fecha}"
+            bitacora.warn(mensaje)
+            click.echo(mensaje)
+            continue
+
+        # En este punto tenemos un edicto_acuse que debe republicarse...
+
+        # Crear un nuevo Edicto para republicar
+        nuevo_edicto = Edicto(
+            fecha=fecha,
+            descripcion=edicto_acuse.edicto.descripcion,
+            archivo=edicto_acuse.edicto.archivo,
+            url=edicto_acuse.edicto.url,
+            autoridad_id=edicto_acuse.edicto.autoridad_id,
+            edicto_id_original=edicto_acuse.edicto_id,
+        )
+
+        # Guardarlo para obtener su ID
+        nuevo_edicto.save()
+
+        # Incrementar contador
+        contador += 1
+
+        # Agregar mensaje a la bitacora
+        mensaje = f"Edicto republicado: Notaria {nuevo_edicto.autoridad.descripcion_corta}, ID original {edicto_acuse.edicto_id}, ID {nuevo_edicto.id}, fecha {fecha}."
         bitacora.info(mensaje)
         click.echo(mensaje)
 
-    except Exception as e:
-        # En caso de error, registrar el mensaje en la bitácora
-        bitacora.error(f"Error al republicar el edicto %s: {e}")
-        click.echo(f"Error al republicar el edicto %s: {e}")
+    # Mostrar un mensaje de término
+    mensaje = f"Se republicaron {contador} edictos para {fecha}"
+    bitacora.info(mensaje)
+    click.echo(mensaje)
 
 
 cli.add_command(republicar)
