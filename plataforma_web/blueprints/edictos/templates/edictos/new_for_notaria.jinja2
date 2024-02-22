@@ -2,7 +2,7 @@
 {% import 'macros/form.jinja2' as f with context %}
 {% import 'macros/topbar.jinja2' as topbar %}
 
-{% block title %}Subir Edicto notaria{% endblock %}
+{% block title %}Publicación Edicto notaria{% endblock %}
 
 {% block custom_head %}
     {{ f.drop_zone_css() }}
@@ -12,7 +12,7 @@
 {% endblock %}
 
 {% block topbar_actions %}
-    {{ topbar.page('Subir Edicto notaria') }}
+    {{ topbar.page('Publicación de Edicto para ' + current_user.autoridad.descripcion_corta) }}
 {% endblock %}
 
 {% block content %}
@@ -20,9 +20,10 @@
         {% call f.form_tag_multipart('edictos.new_for_notaria', fid='edicto_form') %}
             {% call f.form_group(form.fecha, readonly=true, type="hidden") %}{% endcall %}
             {% call f.form_group(form.acuse_num, css_class="radiobutton_inline mi_acuse") %}{% endcall %}
+            <span><b>Eliga las fechas de publicación en orden cronológico</b></span>
             {% for i in range(1,6) %}
                 <div id="fecha_acuse_titulo_{{ i }}" class="fecha-acuse-titulo" style="display: none;">
-                    <label for="fecha_acuse_{{ i }}">Fecha Publicacion</label>
+                    <label for="fecha_acuse_{{ i }}">Fecha Publicación</label>
                 </div>
                 {% call f.form_group(form['fecha_acuse_' + i|string], id='fecha_acuse_' + i|string, class="fecha-acuse form-control", style='display:none;') %}{% endcall %}
             {% endfor %}
@@ -52,14 +53,6 @@
                 // Setear la primer fecha como la fecha actual
                 $("fecha_acuse_1").val(getFormattedDate(new Date()));
             });
-
-            // Funcion para obtener la fecha en formato "yyyy-mm-dd"
-            function getFormattedDate(date){
-                var year = date.getFullYear();
-                var month = (1 + date.getMonth().toString().padStart(2,'0'));
-                var day = date.getDate().toString().padStart(2, '0');
-                return year + '-' + month + '-' + day;
-            }
         });
     </script>
 {% endblock %}

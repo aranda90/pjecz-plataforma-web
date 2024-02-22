@@ -1,11 +1,10 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
 
 import click
 
 from plataforma_web.app import create_app
 from plataforma_web.extensions import db
-from plataforma_web.blueprints.autoridades.models import Autoridad
 from plataforma_web.blueprints.edictos.models import Edicto
 from plataforma_web.blueprints.edictos_acuses.models import EdictoAcuse
 
@@ -36,27 +35,25 @@ def republicar():
         # Consultar EdictoAcuse, filtrado por la fecha de hoy
         edictos_acuses_hoy = EdictoAcuse.query.filter_by(fecha=fecha_actual).all()
 
-        # Obtener los id de los edictos para republicar
-        edictos_id_republicar = set(acuse.edicto_id for acuse in edictos_acuses_hoy)
-
-        # Consultar los Edicto a republicar
-        edictos_a_republicar = Edicto.query.filter(Edicto.id.in_(edictos_id_republicar)).all()
-
-        print(edictos_a_republicar)
-
         # Inicializar un contador de republicaciones
         contador = 0
-
+        # Ciclo por cada EdictoAcuse de hoy
         for edicto_acuse in edictos_acuses_hoy:
             # Consultar si el edicto ya está republicado para hoy
-            if Edicto.query.filter_by(id=edicto_acuse.edicto_id, fecha=fecha_actual).first():
+            if Edicto.query.filter_by(id=edicto_acuse.edicto_id, fecha=fecha_actual, estatus="A").first():
                 bitacora.info(f"El edicto con ID %s {edicto_acuse.edicto_id} ya está republicado para hoy")
                 continue
 
-            # Obtener el Edicto original
+            # Se obtiene el Edicto original asociado al EdictoAcuse
             edicto = Edicto.query.get(edicto_acuse.edicto_id)
             if not edicto:
                 bitacora.error(f"No se encontró el Edicto con ID %s {edicto_acuse.edicto_id}")
+                continue
+
+            # Comprueba si ya existe una republicación para el edicto actual con la misma descripción y para la fecha actual.
+            # Si existe, registra un mensaje en la bitácora y continua con el siguiente edicto.
+            if Edicto.query.filter_by(fecha=fecha_actual, descripcion=edicto.descripcion, republicado=True).first():
+                bitacora.info(f"Ya existe una republicación para el edicto con ID %s {edicto.id} y descripción '{edicto.descripcion}' para hoy")
                 continue
 
             # Crear una copia del edicto republicado con un nuevo ID
@@ -68,13 +65,11 @@ def republicar():
                 republicado=True,
                 autoridad_id=edicto.autoridad_id,
             )
-            db.session.add(nuevo_edicto)
-            db.session.commit()
+            nuevo_edicto.save()
             print(f"Nuevo edicto republicado: {nuevo_edicto} con ID {nuevo_edicto.id}")
             click.echo(f"se republico {nuevo_edicto}")
-            # Actualizar la fecha del nuevo edicto republicado
-            nuevo_edicto.fecha = fecha_actual
             contador += 1
+            # Se crea una copia del Edicto original con un nuevo ID y se marca como republicado.
 
         # Mostrar un mensaje de término
         mensaje = f"Republicados {contador} edictos para hoy ({fecha_actual})"
@@ -83,8 +78,8 @@ def republicar():
 
     except Exception as e:
         # En caso de error, registrar el mensaje en la bitácora
-        bitacora.error(f"Error al republicar edictos %s: {e}")
-        click.echo(f"Error al republicar edictos %s: {e}")
+        bitacora.error(f"Error al republicar el edicto %s: {e}")
+        click.echo(f"Error al republicar el edicto %s: {e}")
 
 
 cli.add_command(republicar)

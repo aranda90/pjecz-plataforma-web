@@ -4,7 +4,7 @@ Edictos, formularios
 
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileField, FileRequired
-from wtforms import DateField, SelectField, StringField, SubmitField, HiddenField, RadioField
+from wtforms import DateField, SelectField, StringField, SubmitField, RadioField
 from wtforms.validators import DataRequired, Length, Optional, Regexp
 
 from lib.safe_string import EXPEDIENTE_REGEXP, NUMERO_PUBLICACION_REGEXP

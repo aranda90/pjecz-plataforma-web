@@ -600,7 +600,6 @@ def new_for_notaria():
     # Si viene el formulario
     form = EdictoNewNotariaForm(CombinedMultiDict((request.files, request.form)))
     if form.validate_on_submit():
-        # filtrar_acuse_dates(form)
         # Validar fecha
         fecha = form.fecha.data
         if not limite_dt <= datetime.datetime(year=fecha.year, month=fecha.month, day=fecha.day) <= hoy_dt:
@@ -615,6 +614,7 @@ def new_for_notaria():
             flash("La descripción es incorrecta.", "warning")
             return render_template("edictos/new_for_notaria.jinja2", form=form)
 
+        # Validad acuse_num
         try:
             acuse_num = int(form.acuse_num.data)
         except ValueError:
@@ -656,8 +656,20 @@ def new_for_notaria():
 
         # Insertar las fechas de acuses ingresadas manualmente por el usuario
         nuevas_fechas_acuses = [getattr(form, f"fecha_acuse_{i}").data for i in range(1, acuse_num + 1)]
+        # Recorre cada una de las fechas ingresadas manualmente por el usuario
         for fecha_acuse in nuevas_fechas_acuses:
             if fecha_acuse is not None:  # Verificar que la fecha no sea None
+                # Calcula la fecha límite permitida, que es hoy más 30 días
+                limite_futuro = datetime.date.today() + datetime.timedelta(days=30)
+                # Verifica que la fecha de acuse no sea del pasado
+                if fecha_acuse < datetime.date.today():
+                    flash("La fecha de publicación no puede ser del pasado.", "warning")
+                    return render_template("edictos/new_for_notaria.jinja2", form=form)
+                # Verifica que la fecha de acuse no sea más de un mes en el futuro
+                if fecha_acuse > limite_futuro:
+                    flash("Solo se permite seleccionar fechas de publicación hasta un mes en el futuro.", "warning")
+                    return render_template("edictos/new_for_notaria.jinja2", form=form)
+                # Crea un nuevo objeto EdictoAcuse y lo guarda en la base de datos
                 acuse = EdictoAcuse(
                     edicto_id=edicto.id,
                     fecha=fecha_acuse,
