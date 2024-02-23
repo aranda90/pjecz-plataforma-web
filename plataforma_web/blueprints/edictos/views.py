@@ -49,13 +49,13 @@ def checkout(id_hashed):
 
 
 @edictos.route("/edictos/acuses/<id_hashed>/<edicto_acuse_id>")
-def checkoutNotaria(id_hashed, edicto_acuse_id):
-    """Acuse"""
+def checkout_notaria(id_hashed, edicto_acuse_id):
+    """Acuse Notarias"""
     edicto = Edicto.query.get_or_404(Edicto.decode_id(id_hashed))
     edicto_acuse = EdictoAcuse.query.get_or_404(edicto_acuse_id)
     dia, mes, anio = dia_mes_ano(edicto.creado)
     fecha_del_acuse = edicto_acuse.fecha
-    return render_template("edictos/print.jinja2", edicto=edicto, dia=dia, mes=mes.upper(), anio=anio, fecha_del_acuse=fecha_del_acuse)
+    return render_template("edictos/print_notaria.jinja2", edicto=edicto, dia=dia, mes=mes.upper(), anio=anio, fecha_del_acuse=fecha_del_acuse)
 
 
 @edictos.before_request

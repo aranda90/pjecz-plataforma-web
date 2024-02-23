@@ -23,6 +23,36 @@
 
 {% block content %}
     {% call list.card() %}
+        <!-- Filtros Edictos -->
+        <div class="row">
+            <div class="col">
+                <form class="row g-1 mb-3" id="filtradorForm" onsubmit="filtrosEdictos.buscar(); return false;">
+                    <div class="col-3">
+                        <div class="form-floating">
+                            <input id="filtroFechaDesde" type="date" class="form-control" aria-label="Edicto" style="text-transform: uppercase;">
+                            <label for="filtroFechaDesde">Fecha desde</label>
+                        </div>
+                    </div>
+                    <div class="col-3">
+                        <div class="form-floating">
+                            <input id="filtroFechaHasta" type="date" class="form-control" aria-label="Edicto" style="text-transform: uppercase;">
+                            <label for="filtroFechaHasta">Fecha Hasta</label>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="form-floating">
+                            <input id="filtroDescripcion" type="text" class="form-control" aria-label="EdictoNotaria" style="text-transform: uppercase;">
+                            <label for="filtroDescripcion">Descripción</label>
+                        </div>
+                    </div>
+                    <div class="col-2 text-end">
+                        <button title="Buscar" class="btn btn-primary btn-lg" onclick="filtrosEdictos.buscar(); return false;" id="button-buscar"><span class="iconify" data-icon="mdi:magnify"></span></button>
+                        <button title="Limpiar" class="btn btn-warning btn-lg" type="reset" onclick="filtrosEdictos.limpiar();" id="button-limpiar"><span class="iconify" data-icon="mdi:broom"></span></button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <!-- DataTable Edictos -->
         <table id="edictos_datatable" class="table {% if estatus == 'B'%}table-dark{% endif %} display nowrap" style="width:100%">
             <thead>
                 <tr>
@@ -36,66 +66,49 @@
 {% endblock %}
 
 {% block custom_javascript %}
+    <script src="/static/js/datatables-constructor.js"></script>
+    <script src="/static/js/datatables-filtros.js"></script>
     <script>
-        $('#edictos_datatable').DataTable({
-            processing: true,
-            serverSide: true,
-            ordering: false,
-            searching: false,
-            responsive: true,
-            scrollX: true,
-            ajax: {
-                url: "/edictos/datatable_json",
-                type: "POST",
-                headers: { "X-CSRF-TOKEN": "{{ csrf_token() }}" },
-                dataType: "json",
-                dataSrc: "data",
-                data: {{ filtros }}
-            },
-            columns: [
-                { data: "fecha" },
-                { data: "detalle" },
-                { data: "archivo" }
-            ],
-            columnDefs: [
-                {
-                    targets: 0,
-                    type: "date",
-                    render: function (data, type, row) {
-                        return moment(data).format("DD MMM YYYY");
-                    }
-                },
-                {
-                    targets: 1,
-                    data: null,
-                    render: function(data, type, row, meta) {
-                        return '<a href="' + data.url + '">' +
-                            (data.descripcion.length > 40 ? data.descripcion.substr(0, 40) + '…' : data.descripcion) +
-                            '</a>';
-                    }
-                },
-                {
-                    targets: 2,
-                    data: null,
-                    render: function(data, type, row, meta) {
-                        return '<a href="' + data.descargar_url + '" target="_blank">PDF</a>';
-                    }
+        // DataTable Edictos
+        const constructorDataTable = new ConfigDataTable( '{{ csrf_token() }}' );
+        let configDTEdictos = constructorDataTable.config();
+        configDTEdictos['ajax']['url'] = '/edictos/datatable_json';
+        configDTEdictos['ajax']['data'] = {{ filtros }};
+        configDTEdictos['columns'] = [
+            { data: "fecha" },
+            { data: "detalle" },
+            { data: "archivo" }
+        ];
+        configDTEdictos['columnDefs'] = [
+            {
+                targets: 0, // detalle
+                data: null,
+                render: function(data, type, row, meta) {
+                    return moment(data).format("DD MMM YYYY");
                 }
-            ],
-            language: {
-                lengthMenu: "Mostrar _MENU_",
-                search: "Filtrar:",
-                zeroRecords: "No se encontraron registros",
-                info: "Total de registros _TOTAL_ ",
-                infoEmpty: "No hay registros",
-                infoFiltered: "(_TOTAL_ filtrados de _MAX_ registros)",
-                oPaginate: {
-                    sFirst: "Primero",
-                    sLast: "Último",
-                    sNext: "Siguiente",
-                    sPrevious: "Anterior"
+            },
+            {
+                targets: 1, // descripcion
+                data: null,
+                render: function(data, type, row, meta) {
+                    return '<a href="' + data.url + '">' +
+                        (data.descripcion.length > 40 ? data.descripcion.substr(0, 40) + '…' : data.descripcion) +
+                        '</a>';
+                }
+            },
+            {
+                targets: 2, // archivo
+                data: null,
+                render: function(data, type, row, meta) {
+                    return '<a href="' + data.descargar_url + '" target="_blank">PDF</a>';
                 }
             }
-        });
+        ];
+        // Filtros Edictos
+        const filtrosEdictos = new FiltrosDataTable('#edictos_datatable', configDTEdictos);
+        filtrosEdictos.agregarInput('filtroFechaDesde', 'fecha_desde');
+        filtrosEdictos.agregarInput('filtroFechaHasta', 'fecha_hasta');
+        filtrosEdictos.agregarInput('filtroDescripcion', 'descripcion');
+        filtrosEdictos.precargar();
     </script>
 {% endblock %}
