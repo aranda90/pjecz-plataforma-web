@@ -51,7 +51,7 @@ def datatable_json():
         # Validacion para ver un acuse
         url_resultado = "Ver edicto"
         if resultado.fecha <= datetime.now().date():
-            url_resultado = url_for("edictos.checkout", id_hashed=resultado.edicto.encode_id(), edicto_acuse_id=resultado.id)
+            url_resultado = url_for("edictos.checkoutNotaria", id_hashed=resultado.edicto.encode_id(), edicto_acuse_id=resultado.id)
         else:
             url_resultado = "No disponible"
         data.append(

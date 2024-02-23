@@ -4,9 +4,9 @@ Edictos Acuses
 - republicar: Republicar edictos para hoy o la fecha dada
 """
 
-from datetime import datetime
-import logging
 import sys
+import logging
+from datetime import datetime
 
 import click
 
@@ -27,6 +27,7 @@ bitacora.addHandler(empunadura)
 
 
 @click.group()
+@click.pass_context
 def cli(ctx):
     """Edictos"""
 
@@ -45,7 +46,7 @@ def republicar(ctx, fecha):
     edictos_acuses = EdictoAcuse.query.filter_by(fecha=fecha).filter_by(estatus="A").all()
 
     # Si no hay acuses para la fecha, mostrar mensaje y terminar
-    if edictos_acuses is None:
+    if not edictos_acuses:
         mensaje = f"No hay edictos para republicar para {fecha}"
         click.echo(mensaje)
         bitacora.info(mensaje)
@@ -56,14 +57,16 @@ def republicar(ctx, fecha):
 
     # Ciclo por cada EdictoAcuse de hoy
     for edicto_acuse in edictos_acuses:
+        mensaje = f"Trabajando con acuse {edicto_acuse.id} del edicto {edicto_acuse.edicto_id}"
+        click.echo(mensaje)
 
         # Para evitar que se republique mas de una vez
         # consultar los Edictos tomando el edicto_id_original y la fecha
         edictos_posibles = Edicto.query.filter_by(edicto_id_original=edicto_acuse.edicto_id).filter_by(fecha=fecha).filter_by(estatus="A").all()
 
         # Si SI se encontraron edictos_posibles, se omite porque ya estan republicados
-        if edictos_posibles is not None:
-            mensaje = f"Ya se republicaron los edictos para ID {edicto_acuse.edicto_id} del {fecha}"
+        if len(edictos_posibles) > 0:
+            mensaje = f"Ya esta republicado el edicto {edicto_acuse.edicto_id} del {fecha}"
             bitacora.warn(mensaje)
             click.echo(mensaje)
             continue
@@ -82,7 +85,6 @@ def republicar(ctx, fecha):
 
         # Guardarlo para obtener su ID
         nuevo_edicto.save()
-
         # Incrementar contador
         contador += 1
 

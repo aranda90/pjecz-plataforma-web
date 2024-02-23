@@ -43,7 +43,7 @@
                     Acuse
                 </div>
                 <div class="col-md-9">
-                    <a href="{{ url_for('edictos.checkout', id_hashed=edicto_acuse.edicto.encode_id(), edicto_acuse_id=edicto_acuse.id) }}" 
+                    <a href="{{ url_for('edictos.checkoutNotaria', id_hashed=edicto_acuse.edicto.encode_id(), edicto_acuse_id=edicto_acuse.id) }}" 
                         class="disabled-link"  {% if edicto_acuse.fecha != now.date() %}disabled{% endif %}>
                         De clic aquí
                     </a>
