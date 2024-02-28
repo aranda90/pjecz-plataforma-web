@@ -92,16 +92,12 @@
                     targets: 1, // descripcion
                     data: null,
                     render: function(data, type, row, meta) {
-                        var descripcion = data.descripcion.length > 32 ? data.descripcion.substr(0, 32) + '…' : data.descripcion;
-                        var content = data.url ? '<a href="' + data.url + '">' + descripcion + '</a>' : descripcion;
-                        if (data.url) {
-                            return '<span title="' + descripcion + '">' + content + '</span>';
-                        } else {
-                            return descripcion;
-                        }
+                        if(data.length > 32)
+                            return '<span title="' + data + '">' + data.substr(0, 32) + '…'  + '</span>';
+                        return data;
                     }
                 },
-                    {
+                {
                     targets: 2, // acuse_recepcion
                     data: null,
                     render: function(data, type, row, meta) {
