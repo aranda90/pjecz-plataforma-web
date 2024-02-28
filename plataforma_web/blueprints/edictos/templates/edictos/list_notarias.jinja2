@@ -91,9 +91,13 @@
                 targets: 1, // descripcion
                 data: null,
                 render: function(data, type, row, meta) {
-                    return '<a href="' + data.url + '">' +
-                        (data.descripcion.length > 40 ? data.descripcion.substr(0, 40) + '…' : data.descripcion) +
-                        '</a>';
+                    var descripcion = data.descripcion.length > 32 ? data.descripcion.substr(0, 32) + '…' : data.descripcion;
+                    var content = data.url ? '<a href="' + data.url + '">' + descripcion + '</a>' : descripcion;
+                    if (data.url) {
+                        return '<span title="' + descripcion + '">' + content + '</span>';
+                    } else {
+                        return descripcion;
+                    }
                 }
             },
             {

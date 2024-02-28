@@ -48,7 +48,7 @@ def datatable_json():
     # Elaborar datos para DataTable
     data = []
     for resultado in registros:
-        # Validacion para ver un acuse
+        # Validacion para ver un acuse url
         url_resultado = "Ver edicto"
         if resultado.fecha <= datetime.now().date():
             url_resultado = url_for("edictos.checkout_notaria", id_hashed=resultado.edicto.encode_id(), edicto_acuse_id=resultado.id)

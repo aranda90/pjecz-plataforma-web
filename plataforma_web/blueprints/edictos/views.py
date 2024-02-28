@@ -182,8 +182,6 @@ def list_autoridad_edictos_inactive(autoridad_id):
     autoridad = Autoridad.query.get_or_404(autoridad_id)
     if current_user.can_admin("EDICTOS"):
         plantilla = "edictos/list_admin.jinja2"
-    elif current_user.can_edit("EDICTOS"):
-        plantilla = "edictos/list_notarias.jinja2"
     else:
         plantilla = "edictos/list.jinja2"
     return render_template(
@@ -309,13 +307,18 @@ def datatable_json():
     # Elaborar datos para DataTable
     data = []
     for edicto in registros:
+        # Crear un diccionario para almacenar el detalle
+        detalle = {
+            "descripcion": edicto.descripcion,
+        }
+        # Verificar si 'edicto_id_original' es igual a 0
+        if edicto.edicto_id_original == 0:
+            # Si es igual a 0, agregar la URL al diccionario
+            detalle["url"] = url_for("edictos.detail", edicto_id=edicto.id)
         data.append(
             {
                 "fecha": edicto.fecha.strftime("%Y-%m-%d 00:00:00"),
-                "detalle": {
-                    "descripcion": edicto.descripcion,
-                    "url": url_for("edictos.detail", edicto_id=edicto.id),
-                },
+                "detalle": detalle,  # Se agrega el diccionario 'detalle' como un elemento del nuevo diccionario.
                 "expediente": edicto.expediente,
                 "numero_publicacion": edicto.numero_publicacion,
                 "archivo": {
