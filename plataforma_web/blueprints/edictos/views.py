@@ -4,20 +4,18 @@ Edictos, vistas
 
 import datetime
 import json
-from pathlib import Path
 from urllib.parse import quote
 
-from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for, jsonify
+from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from werkzeug.datastructures import CombinedMultiDict
-from werkzeug.utils import secure_filename
 
 from lib.datatables import get_datatable_parameters, output_datatable_json
 from lib.exceptions import MyAnyError
 from lib.google_cloud_storage import get_blob_name_from_url, get_media_type_from_filename, get_file_from_gcs
 from lib.safe_string import safe_expediente, safe_message, safe_numero_publicacion, safe_string
 from lib.storage import GoogleCloudStorage, NotAllowedExtesionError, UnknownExtesionError, NotConfiguredError
-from lib.time_to_text import dia_mes_ano, mes_en_palabra
+from lib.time_to_text import dia_mes_ano
 from plataforma_web.blueprints.usuarios.decorators import permission_required
 
 from plataforma_web.blueprints.autoridades.models import Autoridad
@@ -642,14 +640,22 @@ def new_for_notaria():
             flash("Especificar una cantidad publicaciones válida.", "warning")
             return render_template("edictos/new_for_notaria.jinja2", form=form)
 
+        # Inicializar la liberia Google Cloud Storage con el directorio base, la fecha, las extensiones permitidas y los meses como palabras
+        gcstorage = GoogleCloudStorage(
+            base_directory=autoridad.directorio_edictos,
+            upload_date=fecha,
+            allowed_extensions=["pdf"],
+            month_in_word=True,
+            bucket_name=current_app.config["CLOUD_STORAGE_DEPOSITO_EDICTOS"],
+        )
+
         # Validar archivo
-        archivo = request.files.get("archivo")
-        if not archivo or archivo.filename == "":
-            flash("Archivo requerido.", "warning")
-            return render_template("edictos/new_for_notaria.jinja2", form=form)
-        if "." not in archivo.filename or archivo.filename.rsplit(".", 1)[1] != "pdf":
-            flash("No es un archivo PDF.", "warning")
-            return render_template("edictos/new_for_notaria.jinja2", form=form)
+        archivo = request.files["archivo"]
+        try:
+            gcstorage.set_content_type(archivo.filename)
+        except (NotAllowedExtesionError, UnknownExtesionError):
+            flash("Tipo de archivo no permitido o desconocido.", "warning")
+            es_valido = False
 
         # Verifica si la fecha del edicto es igual a la fecha actual
         if fecha == hoy:
@@ -691,42 +697,34 @@ def new_for_notaria():
                     fecha=fecha_acuse,
                 )
                 acuse.save()
-        url = ""
-        # Elaborar nombre del archivo
-        fecha_str = fecha.strftime("%Y-%m-%d")
-        elementos = [fecha_str]
-        elementos.append(safe_string(descripcion, max_len=64).replace(" ", "-"))
-        elementos.append(edicto.encode_id())
-        archivo_str = "-".join(elementos) + ".pdf"
 
-        # Elaborar ruta Autoridad/YYYY/MES/archivo.pdf
-        ano_str = fecha.strftime("%Y")
-        mes_str = mes_en_palabra(fecha.month)
-        ruta_str = str(Path(autoridad.directorio_edictos, ano_str, mes_str, archivo_str))
-
-        # Subir el archivo
+        # Subir a Google Cloud Storage
+        es_exitoso = True
         try:
-            deposito = current_app.config["CLOUD_STORAGE_DEPOSITO_EDICTOS"]
-            storage_client = storage.Client()
-            bucket = storage_client.bucket(deposito)
-            blob = bucket.blob(ruta_str)
-            blob.upload_from_string(archivo.stream.read(), content_type="application/pdf")
-            url = blob.public_url
+            gcstorage.set_filename(hashed_id=edicto.encode_id(), description=descripcion)
+            gcstorage.upload(archivo.stream.read())
+        except (NotAllowedExtesionError, UnknownExtesionError):
+            flash("Tipo de archivo no permitido o desconocido.", "warning")
+            es_exitoso = False
         except NotConfiguredError:
-            flash("No se ha configurado el almacenamiento en la nube.", "warning")
+            flash("Error al subir el archivo porque falla la configuración de GCS.", "danger")
+            es_exitoso = False
         except Exception:
-            # Manejar la excepción de alguna manera, como imprimir un mensaje de error
-            flash(f"Ocurrió un error durante la carga del archivo: {edicto.archivo}", "warning")
+            flash("Error desconocido al subir el archivo.", "danger")
+            es_exitoso = False
 
-        # Actualizar el nombre del archivo y el url
-        edicto.archivo = archivo_str
-        edicto.url = url
+        # Si se sube con exito, actualizar el registro con la URL del archivo y mostrar el detalle
+        if es_exitoso:
+            edicto.archivo = gcstorage.filename
+            edicto.url = gcstorage.url
+            edicto.save()
+            bitacora = new_notaria_success(edicto)
+            flash(bitacora.descripcion, "success")
+            return redirect(bitacora.url)
+
+        # Como no se subio con exito, se cambia el estatus a "B"
+        edicto.estatus = "B"
         edicto.save()
-
-        # Mostrar mensaje de éxito e ir al detalle
-        bitacora = new_notaria_success(edicto)
-        flash(bitacora.descripcion, "success")
-        return redirect(bitacora.url)
 
     # Prellenado de los campos
     form.distrito.data = autoridad.distrito.nombre
@@ -869,20 +867,6 @@ def edit_success(edicto):
         piezas.append(f"expediente {edicto.expediente},")
     if edicto.numero_publicacion != "":
         piezas.append(f"número {edicto.numero_publicacion},")
-    piezas.append(f"fecha {edicto.fecha.strftime('%Y-%m-%d')} de {edicto.autoridad.clave}")
-    bitacora = Bitacora(
-        modulo=Modulo.query.filter_by(nombre=MODULO).first(),
-        usuario=current_user,
-        descripcion=safe_message(" ".join(piezas)),
-        url=url_for("edictos.detail", edicto_id=edicto.id),
-    )
-    bitacora.save()
-    return bitacora
-
-
-def edit_notaria_success(edicto):
-    """Mensaje de éxito al editar un edicto para notaria"""
-    piezas = ["Editado edicto"]
     piezas.append(f"fecha {edicto.fecha.strftime('%Y-%m-%d')} de {edicto.autoridad.clave}")
     bitacora = Bitacora(
         modulo=Modulo.query.filter_by(nombre=MODULO).first(),
