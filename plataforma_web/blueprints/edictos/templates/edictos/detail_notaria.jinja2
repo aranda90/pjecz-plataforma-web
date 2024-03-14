@@ -46,12 +46,13 @@
         {% if current_user.can_admin('EDICTOS') %}
             {{ detail.label_value_new_tab('Descargar como administrador PDF', edicto.archivo, url_for('edictos.download', url=edicto.url)) }}
         {% endif %}
-        {# {{ detail.label_value_new_tab('Acuse', 'De clic aqui', url_for('edictos.checkout', id_hashed=edicto.encode_id())) }} #}
+        {{ detail.label_value_new_tab('Acuse', 'De clic aqui', url_for('edictos.checkout', id_hashed=edicto.encode_id())) }}
         {{ detail.label_value('Creado', moment(edicto.creado).format('llll')) }}
+   
     {% endcall %}
     {# Listado de acuses #}
     {% if current_user.can_view('EDICTOS ACUSES') %}
-        {% call detail.card('Edictos Acuses' ) %}
+        {% call detail.card('Republicacion de edictos' ) %}
             <table id="edictos_acuses_datatable" class="table display nowrap" style="width:100%">
                 <thead>
                     <tr>

@@ -33,7 +33,6 @@ MODULO = "EDICTOS"
 LIMITE_DIAS = 365  # Un anio
 LIMITE_ADMINISTRADORES_DIAS = 3650  # Administradores pueden manipular diez anios
 
-ROL_JUZGADO = "JUZGADO PRIMERA INSTANCIA"
 ROL_NOTARIA = "NOTARIA"
 
 
@@ -42,7 +41,14 @@ def checkout(id_hashed):
     """Acuse"""
     edicto = Edicto.query.get_or_404(Edicto.decode_id(id_hashed))
     dia, mes, anio = dia_mes_ano(edicto.creado)
-    return render_template("edictos/print.jinja2", edicto=edicto, dia=dia, mes=mes.upper(), anio=anio)
+    return render_template(
+        "edictos/print.jinja2",
+        edicto=edicto,
+        dia=dia,
+        mes=mes.upper(),
+        anio=anio,
+        fecha_del_acuse=None,
+    )
 
 
 @edictos.route("/edictos/acuses/<id_hashed>/<edicto_acuse_id>")
@@ -52,7 +58,14 @@ def checkout_notaria(id_hashed, edicto_acuse_id):
     edicto_acuse = EdictoAcuse.query.get_or_404(edicto_acuse_id)
     dia, mes, anio = dia_mes_ano(edicto.creado)
     fecha_del_acuse = edicto_acuse.fecha
-    return render_template("edictos/print_notaria.jinja2", edicto=edicto, dia=dia, mes=mes.upper(), anio=anio, fecha_del_acuse=fecha_del_acuse)
+    return render_template(
+        "edictos/print.jinja2",
+        edicto=edicto,
+        dia=dia,
+        mes=mes.upper(),
+        anio=anio,
+        fecha_del_acuse=fecha_del_acuse,
+    )
 
 
 @edictos.before_request
@@ -593,57 +606,67 @@ def new():
 def new_for_notaria():
     """Subir Edicto para una notaria"""
 
-    # Para validar la fecha
-    hoy = datetime.date.today()
-    hoy_dt = datetime.datetime(year=hoy.year, month=hoy.month, day=hoy.day)
-    limite_dt = hoy_dt + datetime.timedelta(days=-LIMITE_DIAS)
-
     # Validar autoridad
     autoridad = current_user.autoridad
-    if autoridad is None:
-        flash("El juzgado/autoridad no existe.", "warning")
-        return redirect(url_for("edictos.list_active"))
     if autoridad.estatus != "A":
-        flash("El juzgado/autoridad no es activa.", "warning")
-        return redirect(url_for("autoridades.detail", autoridad_id=autoridad.id))
+        flash("La Notaria no es activa.", "warning")
+        return redirect(url_for("edictos.list_active"))
     if not autoridad.distrito.es_distrito_judicial:
-        flash("El juzgado/autoridad no está en un distrito jurisdiccional.", "warning")
-        return redirect(url_for("autoridades.detail", autoridad_id=autoridad.id))
+        flash("El Distrito no es jurisdiccional.", "warning")
+        return redirect(url_for("edictos.list_active"))
     if not autoridad.es_notaria:
-        flash("El juzgado/autoridad no es notaria.", "warning")
-        return redirect(url_for("autoridades.detail", autoridad_id=autoridad.id))
+        flash("La Notarias no tiene en verdadero el boleano que lo define como notaria.", "warning")
+        return redirect(url_for("edictos.list_active"))
     if autoridad.directorio_edictos is None or autoridad.directorio_edictos == "":
-        flash("El juzgado/autoridad no tiene directorio para edictos.", "warning")
-        return redirect(url_for("autoridades.detail", autoridad_id=autoridad.id))
+        flash("La Notaria no tiene directorio para edictos.", "warning")
+        return redirect(url_for("edictos.list_active"))
 
     # Si viene el formulario
     form = EdictoNewNotariaForm(CombinedMultiDict((request.files, request.form)))
     if form.validate_on_submit():
-        # Validar fecha
-        fecha = form.fecha.data
-        if not limite_dt <= datetime.datetime(year=fecha.year, month=fecha.month, day=fecha.day) <= hoy_dt:
-            # if not limite_dt <= fecha <= hoy_dt.date():
-            flash(f"La fecha no debe ser del futuro ni anterior a {LIMITE_DIAS} días.", "warning")
-            form.fecha.data = hoy
-            return render_template("edictos/new_for_notaria.jinja2", form=form)
+        es_valido = True
 
-        # Validar descripcion
-        descripcion = safe_string(form.descripcion.data)
+        # Validar la descripcion
+        descripcion = safe_string(form.descripcion.data, max_len=64, save_enie=True)
         if descripcion == "":
             flash("La descripción es incorrecta.", "warning")
-            return render_template("edictos/new_for_notaria.jinja2", form=form)
+            es_valido = False
 
-        # Validad acuse_num
+        # Validad que acuse_num se entero
         try:
             acuse_num = int(form.acuse_num.data)
         except ValueError:
             flash("Especificar una cantidad publicaciones válida.", "warning")
-            return render_template("edictos/new_for_notaria.jinja2", form=form)
+            es_valido = False
+
+        # Validar que el acuse_num sea entre 1 y 5
+        if not 1 <= acuse_num <= 5:
+            flash("Especificar una cantidad de publicaciones entre 1 y 5.", "warning")
+            es_valido = False
+
+        # Definir la fecha del edicto, simpre es HOY, se usa para GCS
+        hoy_date = datetime.date.today()
+
+        # Validar las fechas de los acuses que se ingresan manualmente por el usuario
+        limite_futuro_date = hoy_date + datetime.timedelta(days=30)
+        fechas_acuses_list = [getattr(form, f"fecha_acuse_{i}").data for i in range(1, acuse_num + 1)]
+        for fecha_acuse in fechas_acuses_list:
+            if fecha_acuse is None:  # Validar que NO sea nulo
+                flash("Falta una de las fechas de publicación.", "warning")
+                es_valido = False
+                break
+            if fecha_acuse < hoy_date:  # Validar que NO sea del pasado
+                flash("La fecha de publicación no puede ser del pasado.", "warning")
+                es_valido = False
+                break
+            if fecha_acuse > limite_futuro_date:  # Validar que NO sea posterior al limite permitido
+                flash("Solo se permiten fechas de publicación hasta un mes en el futuro.", "warning")
+                es_valido = False
 
         # Inicializar la liberia Google Cloud Storage con el directorio base, la fecha, las extensiones permitidas y los meses como palabras
         gcstorage = GoogleCloudStorage(
             base_directory=autoridad.directorio_edictos,
-            upload_date=fecha,
+            upload_date=hoy_date,
             allowed_extensions=["pdf"],
             month_in_word=True,
             bucket_name=current_app.config["CLOUD_STORAGE_DEPOSITO_EDICTOS"],
@@ -657,46 +680,26 @@ def new_for_notaria():
             flash("Tipo de archivo no permitido o desconocido.", "warning")
             es_valido = False
 
-        # Verifica si la fecha del edicto es igual a la fecha actual
-        if fecha == hoy:
-            # Insertar registro
-            edicto = Edicto(
-                autoridad=autoridad,
-                fecha=fecha,
-                acuse_num=acuse_num,
-                descripcion=descripcion,
-                edicto_id_original=0,
-            )
-            edicto.save()
-
-        # Obtener la cantidad de acuses seleccionados
-        try:
-            acuse_num = int(form.acuse_num.data)
-        except (ValueError, TypeError):
-            flash("Especificar una cantidad de publicaciones.", "warning")
+        # Si NO es válido, entonces se vuelve a mostrar el formulario
+        if es_valido is False:
             return render_template("edictos/new_for_notaria.jinja2", form=form)
 
-        # Insertar las fechas de acuses ingresadas manualmente por el usuario
-        nuevas_fechas_acuses = [getattr(form, f"fecha_acuse_{i}").data for i in range(1, acuse_num + 1)]
-        # Recorre cada una de las fechas ingresadas manualmente por el usuario
-        for fecha_acuse in nuevas_fechas_acuses:
-            if fecha_acuse is not None:  # Verificar que la fecha no sea None
-                # Calcula la fecha límite permitida, que es hoy más 30 días
-                limite_futuro = datetime.date.today() + datetime.timedelta(days=30)
-                # Verifica que la fecha de acuse no sea del pasado
-                if fecha_acuse < datetime.date.today():
-                    flash("La fecha de publicación no puede ser del pasado.", "warning")
-                    return render_template("edictos/new_for_notaria.jinja2", form=form)
-                # Verifica que la fecha de acuse no sea más de un mes en el futuro
-                if fecha_acuse > limite_futuro:
-                    flash("Solo se permite seleccionar fechas de publicación hasta un mes en el futuro.", "warning")
-                    return render_template("edictos/new_for_notaria.jinja2", form=form)
-                # Crea un nuevo objeto EdictoAcuse y lo guarda en la base de datos
-                acuse = EdictoAcuse(
-                    edicto_id=edicto.id,
-                    fecha=fecha_acuse,
-                )
-                acuse.save()
+        # Insertar el registro en la base de datos
+        edicto = Edicto(
+            autoridad=autoridad,
+            fecha=hoy_date,
+            acuse_num=acuse_num,
+            descripcion=descripcion,
+        )
+        edicto.save()
+
+        # Insertar los acuses
+        for fecha_acuse in fechas_acuses_list:
+            acuse = EdictoAcuse(
+                edicto_id=edicto.id,
+                fecha=fecha_acuse,
+            )
+            acuse.save()
 
         # Subir a Google Cloud Storage
         es_exitoso = True
@@ -709,11 +712,11 @@ def new_for_notaria():
         except NotConfiguredError:
             flash("Error al subir el archivo porque falla la configuración de GCS.", "danger")
             es_exitoso = False
-        except Exception:
-            flash("Error desconocido al subir el archivo.", "danger")
+        except Exception as error:
+            flash(f"Error inesperado: {str(error)}", "danger")
             es_exitoso = False
 
-        # Si se sube con exito, actualizar el registro con la URL del archivo y mostrar el detalle
+        # Si se sube con exito, actualizar el registro del edicto con el archivo y la URL y mostrar el detalle
         if es_exitoso:
             edicto.archivo = gcstorage.filename
             edicto.url = gcstorage.url
@@ -729,7 +732,6 @@ def new_for_notaria():
     # Prellenado de los campos
     form.distrito.data = autoridad.distrito.nombre
     form.autoridad.data = autoridad.descripcion
-    form.fecha.data = hoy
     return render_template("edictos/new_for_notaria.jinja2", form=form)
 
 

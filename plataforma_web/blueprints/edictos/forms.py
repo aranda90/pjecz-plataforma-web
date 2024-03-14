@@ -28,14 +28,18 @@ class EdictoNewNotariaForm(FlaskForm):
 
     distrito = StringField("Distrito")  # Read only
     autoridad = StringField("Autoridad")  # Read only
-    fecha = DateField("", validators=[Optional()])
-    acuse_num = RadioField("Cantidad de veces a públicar", choices=[("1", "1 vez"), ("2", "2 veces"), ("3", "3 veces"), ("4", "4 veces"), ("5", "5 veces")], validators=[DataRequired()])
+    acuse_num = RadioField(
+        "Cantidad de veces a públicar",
+        coerce=int,
+        choices=[("1", "1 vez"), ("2", "2 veces"), ("3", "3 veces"), ("4", "4 veces"), ("5", "5 veces")],
+        validators=[DataRequired()],
+    )
     fecha_acuse_1 = DateField("Fecha publicación 1", validators=[Optional()])
     fecha_acuse_2 = DateField("Fecha publicación 2", validators=[Optional()])
     fecha_acuse_3 = DateField("Fecha publicación 3", validators=[Optional()])
     fecha_acuse_4 = DateField("Fecha publicación 4", validators=[Optional()])
     fecha_acuse_5 = DateField("Fecha publicación 5", validators=[Optional()])
-    descripcion = StringField("Descripcion", validators=[DataRequired(), Length(max=256)])
+    descripcion = StringField("Descripcion", validators=[DataRequired(), Length(max=64)])
     archivo = FileField("Archivo PDF", validators=[Optional()])
     guardar = SubmitField("Guardar")
 
