@@ -7,7 +7,6 @@ Edictos Acuses
 import sys
 from datetime import datetime
 import logging
-from datetime import datetime
 
 import click
 
