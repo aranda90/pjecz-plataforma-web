@@ -587,6 +587,8 @@ def new():
 @permission_required(MODULO, Permiso.CREAR)
 def new_for_notaria():
     """Subir Edicto para una notaria"""
+    # Definir la fecha del edicto, simpre es HOY, se usa para GCS
+    hoy_date = datetime.date.today()
 
     # Validar autoridad
     autoridad = current_user.autoridad
@@ -626,12 +628,31 @@ def new_for_notaria():
             flash("Especificar una cantidad de publicaciones entre 1 y 5.", "warning")
             es_valido = False
 
-        # Definir la fecha del edicto, simpre es HOY, se usa para GCS
-        hoy_date = datetime.date.today()
+        # Si el usuario seleccionó la opcion de 1 en el radiobutton
+        if acuse_num == 1:
+            # Establecer la fecha de hoy en el primer campo de fecha
+            form.fecha_acuse_1.data = hoy_date.strftime("%Y-%m-%d")
 
         # Validar las fechas de los acuses que se ingresan manualmente por el usuario
         limite_futuro_date = hoy_date + datetime.timedelta(days=30)
-        fechas_acuses_list = [getattr(form, f"fecha_acuse_{i}").data for i in range(1, acuse_num + 1)]
+        fechas_acuses_list = []
+        for i in range(1, acuse_num + 1):
+            # Asegura de que 'i' esté correctamente definido dentro del bucle 'for'
+            fecha_acuse_str = getattr(form, f"fecha_acuse_{i}").data
+            # Verifica si fecha_acuse_str es None y maneja el caso adecuadamente
+            if fecha_acuse_str is None:
+                # Asignar la fecha actual como valor predeterminado
+                fecha_acuse_str = hoy_date.strftime("%Y-%m-%d")
+            # Asegura que la fecha_acuse_str sea una cadena de texto antes de pasarla a strptime()
+            if isinstance(fecha_acuse_str, datetime.date):
+                # Si ya es un objeto de fecha, no necesitas convertirlo
+                fecha_acuse = fecha_acuse_str
+            else:
+                # Convierte la cadena de texto a un objeto de fecha
+                fecha_acuse = datetime.date.strptime(fecha_acuse_str, "%Y-%m-%d")
+            # Agrega la variable fecha_acuse a la lista fechas_acuses_list.
+            fechas_acuses_list.append(fecha_acuse)
+
         for fecha_acuse in fechas_acuses_list:
             if fecha_acuse is None:  # Validar que NO sea nulo
                 flash("Falta una de las fechas de publicación.", "warning")
@@ -675,13 +696,15 @@ def new_for_notaria():
         )
         edicto.save()
 
-        # Insertar los acuses
+        # Insertar los acuses solo si la validación es exitosa
         for fecha_acuse in fechas_acuses_list:
-            acuse = EdictoAcuse(
-                edicto_id=edicto.id,
-                fecha=fecha_acuse,
-            )
-            acuse.save()
+            # Verificar que la fecha del acuse no sea la fecha de hoy
+            if fecha_acuse != hoy_date:
+                acuse = EdictoAcuse(
+                    edicto_id=edicto.id,
+                    fecha=fecha_acuse,
+                )
+                acuse.save()
 
         # Subir a Google Cloud Storage
         es_exitoso = True
@@ -714,6 +737,9 @@ def new_for_notaria():
     # Prellenado de los campos
     form.distrito.data = autoridad.distrito.nombre
     form.autoridad.data = autoridad.descripcion
+    hoy_date = datetime.date.today()
+    for i in range(1, 6):
+        setattr(form, f"fecha_acuse_{i}", hoy_date.strftime("%Y-%m-%d"))
     return render_template("edictos/new_for_notaria.jinja2", form=form)
 
 

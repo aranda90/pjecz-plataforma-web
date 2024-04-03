@@ -1,5 +1,6 @@
 {% extends 'layouts/app.jinja2' %}
 {% import 'macros/form.jinja2' as f with context %}
+{% import 'macros/modals.jinja2' as modals %}
 {% import 'macros/topbar.jinja2' as topbar %}
 
 {% block title %}Publicación Edicto notaria{% endblock %}
@@ -17,20 +18,50 @@
 
 {% block content %}
     {% call f.card() %}
-        {% call f.form_tag_multipart('edictos.new_for_notaria', fid='edicto_form') %}
+        {% call f.form_tag_multipart('edictos.new', fid='edicto_form') %}
             {% call f.form_group(form.acuse_num, css_class="radiobutton_inline mi_acuse") %}{% endcall %}
-            <span><b>Eliga las fechas de publicación en orden cronológico</b></span>
-            {% for i in range(1,6) %}
-                <div id="fecha_acuse_titulo_{{ i }}" class="fecha-acuse-titulo" style="display: none;">
-                    <label for="fecha_acuse_{{ i }}">Fecha Publicación</label>
-                </div>
-                {% call f.form_group(form['fecha_acuse_' + i|string], id='fecha_acuse_' + i|string, class="fecha-acuse form-control", style='display:none;') %}{% endcall %}
-            {% endfor %}
+            <div id="fecha_acuse_container_1" class="fecha-acuse" style="display: none;">
+                <label for="fecha_acuse_1" class="fecha-acuse-titulo" style="display: none;">Primera publicacion</label>
+                <input type="date" class="form-control" id="fecha_acuse_1" name="fecha_acuse_1" value="{{ form.fecha_acuse_1.data }}" disabled>
+            </div>
+            <div id="fecha_acuse_container_2" class="fecha-acuse" style="display: none;">
+                <label for="fecha_acuse_2" class="fecha-acuse-titulo" style="display: none;">Segunda publicacion</label>
+                <input type="date" class="form-control" id="fecha_acuse_2" name="fecha_acuse_2" value="{{ form.fecha_acuse_2.data }}" style="display: none;">
+            </div>
+            <div id="fecha_acuse_container_3" class="fecha-acuse" style="display: none;">
+                <label for="fecha_acuse_3" class="fecha-acuse-titulo" style="display: none;">Tercera publicacion</label>
+                <input type="date" class="form-control" id="fecha_acuse_3" name="fecha_acuse_3" value="{{ form.fecha_acuse_3.data }}" style="display: none;">
+            </div>
+            <div id="fecha_acuse_container_4" class="fecha-acuse" style="display: none;">
+                <label for="fecha_acuse_4" class="fecha-acuse-titulo" style="display: none;">Cuarta publicacion</label>
+                <input type="date" class="form-control" id="fecha_acuse_4" name="fecha_acuse_4" value="{{ form.fecha_acuse_4.data }}" style="display: none;">
+            </div>
+            <div id="fecha_acuse_container_5" class="fecha-acuse" style="display: none;">
+                <label for="fecha_acuse_5" class="fecha-acuse-titulo" style="display: none;">Quinta publicacion</label>
+                <input type="date" class="form-control" id="fecha_acuse_5" name="fecha_acuse_5" value="{{ form.fecha_acuse_5.data }}" style="display: none;">
+            </div>
             {% call f.form_group(form.descripcion) %}{% endcall %}
             {% call f.drop_zone_wrapper() %}
                 {% call f.form_group(form.archivo, class="dropzone") %}{% endcall %}
             {% endcall %}
             {% call f.form_group(form.guardar) %}{% endcall %}
+
+            <!-- Modal -->
+            <div class="modal fade" id="edicto_modal" tabindex="-1" aria-labelledby="edictoModal" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="edicto_title"></h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div id="edicto_body" class="modal-body"></div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="button" id="edicto_confirm" class="btn btn-primary">Publicar</button>
+                    </div>
+                    </div>
+                </div>
+            </div>
         {% endcall %}
     {% endcall %}
 {% endblock %}
@@ -38,20 +69,50 @@
 {% block custom_javascript %}
     {{ f.drop_zone_js() }}
     <script>
-        $(document).ready(function(){
+        $(document).ready(function(){  
+            // Crear Modal para confirmar la publicacion del edicto
+            $("#guardar").click(function(){
+                $("#edicto_title").text("Publicación Edicto");
+                $("#edicto_body").html('¿Estas seguro que deseas realizar esta publicación?')
+                $("#edicto_modal").modal('show')
+                return false;
+            });
+        });
+    </script>
+    <script>
+        $(document).ready(function(){  
             $('.mi_acuse').change(function(){
                 var numAcuses = $('input[name="acuse_num"]:checked').val();
                 $('.fecha-acuse-titulo').hide() // Ocultar todos los titulos
                 $('.fecha-acuse').hide(); // Ocultar todos los campos de fecha
                 // Muestra los titulos y campos de fecha según la cantidad seleccionada
                 for(var i = 1; i <= numAcuses; i++){
-                    $("#fecha_acuse_titulo" + i).show();
-                    $("#fecha_acuse_" + i).show();
+                    $(".fecha-acuse-titulo").show();
+                    $("#fecha_acuse_container_" + i + ".fecha-acuse").show();
+                    if(i == 1){
+                        // Mostrar la fecha de hoy como texto
+                        $("#fecha_acuse_1").val(getFormattedDate(new Date()));
+                        // Asegurarse de que el campo fecha_acuse_1 esté visible
+                        $("#fecha_acuse_1").show();
+                    }else{
+                        // Mostrar el campo de fecha correspondiente si se seleccionan más de una opción en los radio buttons
+                        $("#fecha_acuse_" + i).show();
+                    }
                 }
-
-                // Setear la primer fecha como la fecha actual
-                $("fecha_acuse_1").val(getFormattedDate(new Date()));
             });
+        });
+
+        // Función para formatear la fecha actual en el formato requerido por el campo de fecha
+        function getFormattedDate(date) {
+            var day = ("0" + date.getDate()).slice(-2);
+            var month = ("0" + (date.getMonth() + 1)).slice(-2);
+            var year = date.getFullYear();
+            return year + "-" + month + "-" + day;
+        }
+        
+        // confirmar botón de modal para la publicacion del Edicto haga el submit
+        $("#edicto_confirm").click(function(){
+            $("#edicto_form").submit()
         });
     </script>
 {% endblock %}
