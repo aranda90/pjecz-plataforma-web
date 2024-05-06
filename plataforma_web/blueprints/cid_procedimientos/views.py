@@ -9,7 +9,7 @@ from flask_login import current_user, login_required
 from sqlalchemy import or_
 
 from lib.datatables import get_datatable_parameters, output_datatable_json
-from lib.safe_string import safe_email, safe_string, safe_message
+from lib.safe_string import safe_clave, safe_email, safe_string, safe_message
 
 from plataforma_web.blueprints.autoridades.models import Autoridad
 from plataforma_web.blueprints.bitacoras.models import Bitacora
@@ -52,31 +52,39 @@ def datatable_json():
     draw, start, rows_per_page = get_datatable_parameters()
     # Consultar
     consulta = CIDProcedimiento.query
+    # Filtrar
     if "estatus" in request.form:
         consulta = consulta.filter_by(estatus=request.form["estatus"])
     else:
         consulta = consulta.filter_by(estatus="A")
-    if "usuario_id" in request.form:
-        consulta = consulta.filter(CIDProcedimiento.usuario_id == request.form["usuario_id"])
+    if "cid_procedmiento_id" in request.form:
+        try:
+            cid_procedimiento_id = int(request.form["cid_procedmiento_id"])
+            consulta = consulta.filter(CIDProcedimiento.id == cid_procedimiento_id)
+        except ValueError:
+            pass
+    if "codigo" in request.form:
+        consulta = consulta.filter(CIDProcedimiento.codigo.contains(safe_clave(request.form["codigo"])))
     if "seguimiento" in request.form:
         consulta = consulta.filter(CIDProcedimiento.seguimiento == request.form["seguimiento"])
-    if "seguimiento_filtro" in request.form:
-        consulta = consulta.filter(CIDProcedimiento.seguimiento.contains(request.form["seguimiento_filtro"]))
-    if "fecha_desde" in request.form:
-        consulta = consulta.filter(CIDProcedimiento.creado >= request.form["fecha_desde"])
-    if "fecha_hasta" in request.form:
-        consulta = consulta.filter(CIDProcedimiento.creado <= request.form["fecha_hasta"])
     if "titulo_procedimiento" in request.form:
         consulta = consulta.filter(CIDProcedimiento.titulo_procedimiento.contains(safe_string(request.form["titulo_procedimiento"])))
-    if "codigo" in request.form:
-        consulta = consulta.filter(CIDProcedimiento.codigo.contains(safe_string(request.form["codigo"])))
-    if "elaboro_nombre" in request.form:
-        consulta = consulta.filter(CIDProcedimiento.elaboro_nombre.contains(safe_string(request.form["elaboro_nombre"])))
+    if "usuario_id" in request.form:
+        consulta = consulta.filter(CIDProcedimiento.usuario_id == request.form["usuario_id"])
+    # if "seguimiento_filtro" in request.form:
+    #     consulta = consulta.filter(CIDProcedimiento.seguimiento.contains(request.form["seguimiento_filtro"]))
+    # if "fecha_desde" in request.form:
+    #     consulta = consulta.filter(CIDProcedimiento.creado >= request.form["fecha_desde"])
+    # if "fecha_hasta" in request.form:
+    #     consulta = consulta.filter(CIDProcedimiento.creado <= request.form["fecha_hasta"])
+    # if "elaboro_nombre" in request.form:
+    #     consulta = consulta.filter(CIDProcedimiento.elaboro_nombre.contains(safe_string(request.form["elaboro_nombre"])))
     # Si viene el filtro con un listado de ids de areas, filtrar por ellas
     if "cid_areas[]" in request.form:
-        # Se convierte el parametro (numeros separados por comas) a una lista
-        listado_areas_ids = request.form["cid_areas[]"].split(",")
+        areas_a_filtrar = request.form.getlist("cid_areas[]")
+        listado_areas_ids = [int(area_id) for area_id in areas_a_filtrar]
         consulta = consulta.filter(CIDProcedimiento.cid_area_id.in_(listado_areas_ids))
+    # Ordenar y paginar
     registros = consulta.order_by(CIDProcedimiento.titulo_procedimiento).offset(start).limit(rows_per_page).all()
     total = consulta.count()
     # Elaborar datos para DataTable
@@ -118,31 +126,39 @@ def datatable_json_admin():
     draw, start, rows_per_page = get_datatable_parameters()
     # Consultar
     consulta = CIDProcedimiento.query
+    # Filtrar
     if "estatus" in request.form:
         consulta = consulta.filter_by(estatus=request.form["estatus"])
     else:
         consulta = consulta.filter_by(estatus="A")
-    if "usuario_id" in request.form:
-        consulta = consulta.filter(CIDProcedimiento.usuario_id == request.form["usuario_id"])
+    if "cid_procedmiento_id" in request.form:
+        try:
+            cid_procedimiento_id = int(request.form["cid_procedmiento_id"])
+            consulta = consulta.filter(CIDProcedimiento.id == cid_procedimiento_id)
+        except ValueError:
+            pass
+    if "codigo" in request.form:
+        consulta = consulta.filter(CIDProcedimiento.codigo.contains(safe_clave(request.form["codigo"])))
     if "seguimiento" in request.form:
         consulta = consulta.filter(CIDProcedimiento.seguimiento == request.form["seguimiento"])
-    if "seguimiento_filtro" in request.form:
-        consulta = consulta.filter(CIDProcedimiento.seguimiento.contains(request.form["seguimiento_filtro"]))
-    if "fecha_desde" in request.form:
-        consulta = consulta.filter(CIDProcedimiento.creado >= request.form["fecha_desde"])
-    if "fecha_hasta" in request.form:
-        consulta = consulta.filter(CIDProcedimiento.creado <= request.form["fecha_hasta"])
     if "titulo_procedimiento" in request.form:
         consulta = consulta.filter(CIDProcedimiento.titulo_procedimiento.contains(safe_string(request.form["titulo_procedimiento"])))
-    if "codigo" in request.form:
-        consulta = consulta.filter(CIDProcedimiento.codigo.contains(safe_string(request.form["codigo"])))
-    if "elaboro_nombre" in request.form:
-        consulta = consulta.filter(CIDProcedimiento.elaboro_nombre.contains(safe_string(request.form["elaboro_nombre"])))
+    if "usuario_id" in request.form:
+        consulta = consulta.filter(CIDProcedimiento.usuario_id == request.form["usuario_id"])
+    # if "seguimiento_filtro" in request.form:
+    #     consulta = consulta.filter(CIDProcedimiento.seguimiento.contains(request.form["seguimiento_filtro"]))
+    # if "fecha_desde" in request.form:
+    #     consulta = consulta.filter(CIDProcedimiento.creado >= request.form["fecha_desde"])
+    # if "fecha_hasta" in request.form:
+    #     consulta = consulta.filter(CIDProcedimiento.creado <= request.form["fecha_hasta"])
+    # if "elaboro_nombre" in request.form:
+    #     consulta = consulta.filter(CIDProcedimiento.elaboro_nombre.contains(safe_string(request.form["elaboro_nombre"])))
+    # Si viene el filtro con un listado de ids de areas, filtrar por ellas
     if "cid_areas[]" in request.form:
-        areas_id = request.form["cid_areas[]"]
-        area_list = areas_id.split(",")
-        for area_id in area_list:
-            consulta = consulta.filter(CIDProcedimiento.cid_area_id == area_id)
+        areas_a_filtrar = request.form.getlist("cid_areas[]")
+        listado_areas_ids = [int(area_id) for area_id in areas_a_filtrar]
+        consulta = consulta.filter(CIDProcedimiento.cid_area_id.in_(listado_areas_ids))
+    # Ordenar y paginar
     registros = consulta.order_by(CIDProcedimiento.id.desc()).offset(start).limit(rows_per_page).all()
     total = consulta.count()
     # Elaborar datos para DataTable
@@ -296,7 +312,7 @@ def list_all_inactive():
     return render_template(
         "cid_procedimientos/list_admin.jinja2",
         titulo="Todos los procedimientos eliminados",
-        filtros=json.dumps({"estatus": "A"}),
+        filtros=json.dumps({"estatus": "B"}),
         estatus="B",
         show_button_list_owned=True,
         show_button_list_all=True,
@@ -369,7 +385,7 @@ def new():
             autoridad=current_user.autoridad,
             usuario=current_user,
             titulo_procedimiento=safe_string(form.titulo_procedimiento.data),
-            codigo=form.codigo.data,
+            codigo=safe_clave(form.codigo.data),
             revision=form.revision.data,
             fecha=form.fecha.data,
             objetivo=form.objetivo.data,
@@ -455,7 +471,7 @@ def edit(cid_procedimiento_id):
         else:
             control_cambios = control
         cid_procedimiento.titulo_procedimiento = safe_string(form.titulo_procedimiento.data)
-        cid_procedimiento.codigo = form.codigo.data
+        cid_procedimiento.codigo = safe_clave(form.codigo.data)
         cid_procedimiento.revision = form.revision.data
         cid_procedimiento.fecha = form.fecha.data
         cid_procedimiento.objetivo = form.objetivo.data
@@ -475,7 +491,6 @@ def edit(cid_procedimiento_id):
         cid_procedimiento.aprobo_puesto = safe_string(form.aprobo_puesto.data)
         cid_procedimiento.aprobo_email = safe_email(aprobo_email)
         cid_procedimiento.control_cambios = control_cambios
-        cid_procedimiento.cid_area_id = 1
         cid_procedimiento.save()
         bitacora = Bitacora(
             modulo=Modulo.query.filter_by(nombre=MODULO).first(),
@@ -490,6 +505,7 @@ def edit(cid_procedimiento_id):
     form.titulo_procedimiento.data = cid_procedimiento.titulo_procedimiento
     form.codigo.data = cid_procedimiento.codigo
     form.revision.data = cid_procedimiento.revision
+    form.cid_area.data = cid_procedimiento.cid_area
     form.fecha.data = cid_procedimiento.fecha
     form.objetivo.data = cid_procedimiento.objetivo
     form.alcance.data = cid_procedimiento.alcance
@@ -595,10 +611,11 @@ def cambiar_area(cid_procedimiento_id):
         bitacora.save()
         flash(bitacora.descripcion, "success")
         return redirect(bitacora.url)
-    # mostrar
+    # Mostrar
     form.titulo_procedimiento.data = cid_procedimiento.titulo_procedimiento
     form.codigo.data = cid_procedimiento.codigo
     form.cid_area_original.data = cid_procedimiento.cid_area.nombre
+    form.cid_area.data = cid_procedimiento.cid_area
     return render_template("cid_procedimientos/cambiar_area.jinja2", form=form, cid_procedimiento=cid_procedimiento)
 
 
@@ -746,6 +763,10 @@ def accept_reject(cid_procedimiento_id):
     if original.seguimiento_posterior in ["EN REVISION", "EN AUTORIZACION"]:
         flash("Este procedimiento ya fue aceptado.", "warning")
         return redirect(url_for("cid_procedimientos.detail", cid_procedimiento_id=original.id))
+    # Validación para procedimientos AUTORIZADO y no poder aceptar de nuevo
+    if original.seguimiento == "REVISADO" and original.seguimiento_posterior == "AUTORIZADO":
+        flash("Este procedimiento ya ha sido AUTORIZADO y no puede ser aceptado nuevamente.", "warning")
+        return redirect(url_for("cid_procedimientos.detail", cid_procedimiento_id=original.id))
     form = CIDProcedimientoAcceptRejectForm()
     if form.validate_on_submit():
         # Si fue aceptado
@@ -818,7 +839,7 @@ def accept_reject(cid_procedimiento_id):
                 firma="",
                 archivo="",
                 url="",
-                cid_area_id=1,
+                cid_area=original.cid_area,
             ).save()
             # Actualizar el anterior
             if original.seguimiento == "ELABORADO":
@@ -839,7 +860,7 @@ def accept_reject(cid_procedimiento_id):
                         descripcion=cid_formato.descripcion,
                         archivo=cid_formato.archivo,
                         url=cid_formato.url,
-                        cid_area_id=1,
+                        cid_area=cid_formato.cid_area,
                     ).save()
             # Bitacora
             bitacora = Bitacora(
@@ -956,3 +977,15 @@ def query_revisores_autorizadores_json():
     for usuario in usuarios.order_by(Usuario.email).limit(10).all():
         results.append({"id": usuario.email, "text": usuario.email, "nombre": usuario.nombre})
     return {"results": results, "pagination": {"more": False}}
+
+
+@cid_procedimientos.route("/cid_procedimientos/exportar_lista_maestra_xlsx")
+@permission_required(MODULO, Permiso.VER)
+def exportar_xlsx():
+    """Lanzar tarea en el fondo para exportar la Lista Maestra a un archivo XLSX"""
+    tarea = current_user.launch_task(
+        comando="cid_procedimientos.tasks.lanzar_exportar_xlsx",
+        mensaje="Exportando la Lista Maestra a un archivo XLSX...",
+    )
+    flash("Se ha lanzado esta tarea en el fondo. Esta página se va a recargar en 30 segundos...", "info")
+    return redirect(url_for("tareas.detail", tarea_id=tarea.id))
