@@ -23,6 +23,7 @@ from plataforma_web.blueprints.modulos.models import Modulo
 from plataforma_web.blueprints.permisos.models import Permiso
 from plataforma_web.blueprints.arc_solicitudes.models import ArcSolicitud
 from plataforma_web.blueprints.arc_documentos_tipos.models import ArcDocumentoTipo
+from plataforma_web.blueprints.arc_juzgados_extintos.models import ArcJuzgadoExtinto 
 
 from plataforma_web.blueprints.arc_documentos.forms import (
     ArcDocumentoNewArchivoForm,
@@ -83,6 +84,8 @@ def datatable_json():
         consulta = consulta.filter_by(autoridad_id=int(request.form["juzgado_id"]))
     if "juzgado_extinto_id" in request.form:
         consulta = consulta.filter_by(arc_juzgado_origen_id=int(request.form["juzgado_extinto_id"]))
+    if "juzgado_extinto_clave" in request.form:
+        consulta = consulta.filter(ArcDocumento.arc_juzgados_origen_claves.contains(request.form["juzgado_extinto_clave"]))
     if "distrito_id" in request.form:
         distrito_id = int(request.form["distrito_id"])
         consulta = consulta.join(Autoridad)
@@ -117,8 +120,7 @@ def datatable_json():
                     "clave_actual": resultado.autoridad.clave,
                     "nombre_actual": resultado.autoridad.descripcion_corta,
                     "url_actual": url_for("autoridades.detail", autoridad_id=resultado.autoridad.id) if current_user.can_view("AUTORIDADES") else "",
-                    "clave_origen": resultado.arc_juzgado_origen.clave if resultado.arc_juzgado_origen_id != None else "",
-                    "nombre_origen": resultado.arc_juzgado_origen.descripcion_corta if resultado.arc_juzgado_origen_id != None else "",
+                    "origenes": resultado.arc_juzgados_origen_claves if resultado.arc_juzgados_origen_claves != None else "",
                 },
                 "anio": resultado.anio,
                 "tipo": resultado.arc_documento_tipo.nombre,
@@ -179,6 +181,9 @@ def detail(documento_id):
     # mostrar secciones según el ROL
     mostrar_secciones = {}
     current_user_roles = current_user.get_roles()
+
+    if current_user.can_admin(MODULO):
+        mostrar_secciones["boton_eliminar"] = True
 
     if current_user.can_edit(MODULO):
         mostrar_secciones["boton_editar"] = True
@@ -256,7 +261,7 @@ def new():
             flash("La instancia seleccionada NO existe", "warning")
         elif tipo_documento is None:
             flash("Este tipo de documento no sé conoce")
-        elif ArcDocumento.query.filter_by(expediente=expediente).filter_by(autoridad_id=juzgado_id).filter_by(arc_documento_tipo=tipo_documento).filter_by(arc_juzgado_origen=form.juzgado_origen.data).filter_by(estatus="A").first():
+        elif ArcDocumento.query.filter_by(expediente=expediente).filter_by(autoridad_id=juzgado_id).filter_by(arc_documento_tipo=tipo_documento).filter_by(arc_juzgados_origen_claves=form.juzgados_origen.data).filter_by(estatus="A").first():
             flash("El número de expediente ya está en uso para la INSTANCIA con ese mismo TIPO y misma INSTANCIA DE ORIGEN. Debe de ser único.", "warning")
         elif anio < 1900 or anio > date.today().year:
             flash(f"El Año debe ser una fecha entre 1900 y el año actual {date.today().year}", "warning")
@@ -277,7 +282,7 @@ def new():
                 demandado=safe_string(form.demandado.data, save_enie=True),
                 juicio=safe_string(form.juicio.data, save_enie=True),
                 tipo_juzgado=safe_string(form.tipo_juzgado.data),
-                arc_juzgado_origen=form.juzgado_origen.data,
+                arc_juzgados_origen_claves=form.juzgados_origen.data,
                 arc_documento_tipo_id=int(form.tipo.data),
                 fojas=int(form.fojas.data),
                 notas=safe_message(form.notas.data, default_output_str=None),
@@ -300,6 +305,8 @@ def new():
             bitacora.save()
             flash(bitacora.descripcion, "success")
             return redirect(bitacora.url)
+    # listado de instancias de origen
+    listado_instancias = ArcJuzgadoExtinto.query.filter_by(estatus='A').order_by(ArcJuzgadoExtinto.clave).all()
     # Bloquear campos según el ROL
     if isinstance(form, ArcDocumentoNewArchivoForm):
         form.ubicacion.data = "ARCHIVO"
@@ -308,7 +315,7 @@ def new():
     else:
         form.juzgado_readonly.data = f"{current_user.autoridad.clave} : {current_user.autoridad.descripcion_corta}"
         form.ubicacion_readonly.data = "JUZGADO"
-    return render_template("arc_documentos/new.jinja2", form=form, mostrar_secciones=mostrar_secciones)
+    return render_template("arc_documentos/new.jinja2", form=form, mostrar_secciones=mostrar_secciones, instancias=listado_instancias)
 
 
 @arc_documentos.route("/arc_documentos/edicion/<int:arc_documento_id>", methods=["GET", "POST"])
@@ -361,7 +368,7 @@ def edit(arc_documento_id):
             ArcDocumento.query.filter_by(expediente=expediente)
             .filter_by(autoridad_id=juzgado_id)
             .filter_by(arc_documento_tipo=tipo_documento)
-            .filter_by(arc_juzgado_origen=form.juzgado_origen.data)
+            .filter_by(arc_juzgados_origen_claves=form.juzgados_origen.data)
             .filter(ArcDocumento.id != arc_documento_id)
             .filter_by(estatus="A")
             .first()
@@ -385,7 +392,7 @@ def edit(arc_documento_id):
             documento.demandado = safe_string(form.demandado.data, save_enie=True)
             documento.juicio = safe_string(form.juicio.data, save_enie=True)
             documento.tipo_juzgado = safe_string(form.tipo_juzgado.data)
-            documento.arc_juzgado_origen = form.juzgado_origen.data
+            documento.arc_juzgados_origen_claves = form.juzgados_origen.data
             documento.arc_documento_tipo_id = int(form.tipo.data)
             documento.fojas = fojas
             documento.notas = safe_message(form.notas.data, default_output_str=None)
@@ -412,12 +419,12 @@ def edit(arc_documento_id):
     form.anio.data = documento.anio
     form.actor.data = documento.actor
     form.demandado.data = documento.demandado
-    form.juzgado_origen.data = documento.arc_juzgado_origen
     form.juicio.data = documento.juicio
     form.tipo_juzgado.data = documento.tipo_juzgado
     form.tipo.data = documento.arc_documento_tipo
     form.fojas.data = documento.fojas
     form.notas.data = documento.notas
+    listado_instancias = ArcJuzgadoExtinto.query.filter_by(estatus='A').order_by(ArcJuzgadoExtinto.clave).all()
     if isinstance(form, ArcDocumentoEditArchivoForm):
         form.juzgado_id.data = documento.autoridad_id
         form.ubicacion.data = documento.ubicacion
@@ -427,7 +434,7 @@ def edit(arc_documento_id):
     else:
         form.juzgado_readonly.data = f"{current_user.autoridad.clave} : {current_user.autoridad.descripcion_corta}"
         form.ubicacion_readonly.data = documento.ubicacion
-    return render_template("arc_documentos/edit.jinja2", form=form, documento=documento)
+    return render_template("arc_documentos/edit.jinja2", form=form, documento=documento, instancias=listado_instancias)
 
 
 @arc_documentos.route("/arc_documentos/buscar", methods=["GET", "POST"])
@@ -444,7 +451,7 @@ def search():
     # Proceso de búsqueda
     if "num_expediente" in request.form:
         num_expediente = request.form["num_expediente"]
-        load_dotenv()
+        load_dotenv()  # Take environment variables from .env
         EXPEDIENTE_VIRTUAL_API_URL = os.environ.get("EXPEDIENTE_VIRTUAL_API_URL", "")
         if EXPEDIENTE_VIRTUAL_API_URL == "":
             flash("No se declaro la variable de entorno EXPEDIENTE_VIRTUAL_API_URL", "warning")
@@ -585,3 +592,51 @@ def search():
             form.juzgado_readonly.data = f"{current_user.autoridad.clave} : {current_user.autoridad.descripcion_corta}"
             form.ubicacion_readonly.data = "JUZGADO"
     return render_template("arc_documentos/new.jinja2", form=form, num_expediente=num_expediente, mostrar_secciones=mostrar_secciones)
+
+
+@arc_documentos.route("/arc_documentos/eliminar/<int:arc_documento_id>")
+@permission_required(MODULO, Permiso.MODIFICAR)
+def delete(arc_documento_id):
+    """Eliminar Expediente"""
+    arc_documento = ArcDocumento.query.get_or_404(arc_documento_id)
+    if arc_documento.estatus == "A":
+        arc_documento.delete()
+        bitacora = Bitacora(
+            modulo=Modulo.query.filter_by(nombre=MODULO).first(),
+            usuario=current_user,
+            descripcion=safe_message(f"Eliminado Expediente {arc_documento.id}"),
+            url=url_for("arc_documentos.detail", documento_id=arc_documento.id),
+        )
+        bitacora.save()
+        # Añadir acción a la bitácora de Solicitudes
+        ArcDocumentoBitacora(
+            arc_documento=arc_documento,
+            usuario=current_user,
+            accion="ELIMINADO",
+        ).save()
+        flash(bitacora.descripcion, "success")
+    return redirect(url_for("arc_documentos.detail", documento_id=arc_documento.id))
+
+
+@arc_documentos.route("/arc_documentos/recuperar/<int:arc_documento_id>")
+@permission_required(MODULO, Permiso.MODIFICAR)
+def recover(arc_documento_id):
+    """Eliminar Expediente"""
+    arc_documento = ArcDocumento.query.get_or_404(arc_documento_id)
+    if arc_documento.estatus == "B":
+        arc_documento.recover()
+        bitacora = Bitacora(
+            modulo=Modulo.query.filter_by(nombre=MODULO).first(),
+            usuario=current_user,
+            descripcion=safe_message(f"Recuperado el Expediente {arc_documento.id}"),
+            url=url_for("arc_documentos.detail", documento_id=arc_documento.id),
+        )
+        bitacora.save()
+        # Añadir acción a la bitácora de Solicitudes
+        ArcDocumentoBitacora(
+            arc_documento=arc_documento,
+            usuario=current_user,
+            accion="RECUPERADO",
+        ).save()
+        flash(bitacora.descripcion, "success")
+    return redirect(url_for("arc_documentos.detail", documento_id=arc_documento.id))

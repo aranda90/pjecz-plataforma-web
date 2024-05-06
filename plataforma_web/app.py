@@ -1,6 +1,7 @@
 """
 Flask App
 """
+
 from flask import Flask
 from redis import Redis
 import rq
@@ -36,6 +37,10 @@ from plataforma_web.blueprints.epocas.views import epocas
 from plataforma_web.blueprints.est_variables.views import est_variables
 from plataforma_web.blueprints.est_informes.views import est_informes
 from plataforma_web.blueprints.est_informes_registros.views import est_informes_registros
+from plataforma_web.blueprints.estados.views import estados
+from plataforma_web.blueprints.exh_exhortos.views import exh_exhortos 
+from plataforma_web.blueprints.exh_exhortos_archivos.views import exh_exhortos_archivos
+from plataforma_web.blueprints.exh_exhortos_partes.views import exh_exhortos_partes  
 from plataforma_web.blueprints.fin_vales.views import fin_vales
 from plataforma_web.blueprints.fin_vales_adjuntos.views import fin_vales_adjuntos
 from plataforma_web.blueprints.funcionarios.views import funcionarios
@@ -56,6 +61,7 @@ from plataforma_web.blueprints.materias.views import materias
 from plataforma_web.blueprints.materias_tipos_juicios.views import materias_tipos_juicios
 from plataforma_web.blueprints.modulos.views import modulos
 from plataforma_web.blueprints.modulos_favoritos.views import modulos_favoritos
+from plataforma_web.blueprints.municipios.views import municipios
 from plataforma_web.blueprints.not_conversaciones.views import not_conversaciones
 from plataforma_web.blueprints.not_escrituras.views import not_escrituras
 from plataforma_web.blueprints.not_mensajes.views import not_mensajes
@@ -86,7 +92,9 @@ from plataforma_web.blueprints.tesis_jurisprudencias_funcionarios.views import t
 from plataforma_web.blueprints.tesis_jurisprudencias_sentencias.views import tesis_jurisprudencias_sentencias
 from plataforma_web.blueprints.ubicaciones_expedientes.views import ubicaciones_expedientes
 from plataforma_web.blueprints.usuarios.views import usuarios
+from plataforma_web.blueprints.usuarios_datos.views import usuarios_datos
 from plataforma_web.blueprints.usuarios_roles.views import usuarios_roles
+from plataforma_web.blueprints.usuarios_nominas.views import usuarios_nominas
 from plataforma_web.blueprints.usuarios_solicitudes.views import usuarios_solicitudes
 
 from plataforma_web.blueprints.usuarios.models import Usuario
@@ -134,6 +142,10 @@ def create_app():
     app.register_blueprint(est_informes)
     app.register_blueprint(est_informes_registros)
     app.register_blueprint(est_variables)
+    app.register_blueprint(estados)
+    app.register_blueprint(exh_exhortos)
+    app.register_blueprint(exh_exhortos_archivos)
+    app.register_blueprint(exh_exhortos_partes)
     app.register_blueprint(fin_vales)
     app.register_blueprint(fin_vales_adjuntos)
     app.register_blueprint(funcionarios)
@@ -154,6 +166,7 @@ def create_app():
     app.register_blueprint(materias_tipos_juicios)
     app.register_blueprint(modulos)
     app.register_blueprint(modulos_favoritos)
+    app.register_blueprint(municipios)
     app.register_blueprint(not_conversaciones)
     app.register_blueprint(not_escrituras)
     app.register_blueprint(not_mensajes)
@@ -183,8 +196,10 @@ def create_app():
     app.register_blueprint(tesis_jurisprudencias_funcionarios)
     app.register_blueprint(tesis_jurisprudencias_sentencias)
     app.register_blueprint(usuarios)
+    app.register_blueprint(usuarios_datos)
     app.register_blueprint(usuarios_roles)
     app.register_blueprint(ubicaciones_expedientes)
+    app.register_blueprint(usuarios_nominas)
     app.register_blueprint(usuarios_solicitudes)
     # Cargar las extensiones
     extensions(app)

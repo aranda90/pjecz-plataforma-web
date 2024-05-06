@@ -145,9 +145,12 @@
                         texto =  '<a href="' + data.url_actual + '">' + data.clave_actual + '</a>';
                     }
                     texto = '<span title="' + data.nombre_actual + '">' + texto + '</span>';
-                    if (data.clave_origen != ""){
-                        texto += '<br /><strong>Origen:</strong> ';
-                        texto += '<span title="' + data.nombre_origen + '">' + data.clave_origen + '</span>';
+                    if (data.origenes != ""){
+                        texto += '<br /><strong>Origenes:</strong><br />';
+                        const origenes_claves = data.origenes.split(", ");
+                        for( let i=0; i<=origenes_claves.length-1; i++ )  {
+                            texto += ' - ' + origenes_claves[i] + '<br/>';
+                        }
                     }
                     return texto;
                 }
@@ -199,7 +202,7 @@
         filtros_documentos.add_input('juzgadoInput', 'juzgado_id');
         filtros_documentos.add_input('tipoSelect', 'tipo');
         filtros_documentos.add_input('partesInput', 'partes');
-        filtros_documentos.add_input('juzgadoExtintoInput', 'juzgado_extinto_id');
+        filtros_documentos.add_input('juzgadoExtintoInput', 'juzgado_extinto_clave');
         filtros_documentos.add_input('ubicacionSelect', 'ubicacion');
         // Precarga de los valores de los inputs mantenidos después de la carga de la página.
         filtros_documentos.precarga();
@@ -251,7 +254,7 @@
             $('#juzgadoExtintoInput').select2({
                 // --- Carga de juzgados por Ajax --- //
                 ajax: {
-                    url: '/arc_juzgados_extintos/juzgados_extintos_json',
+                    url: '/arc_juzgados_extintos/juzgados_extintos_claves_json',
                     headers: { "X-CSRF-TOKEN": "{{ csrf_token() }}" },
                     dataType: 'json',
                     delay: 250,

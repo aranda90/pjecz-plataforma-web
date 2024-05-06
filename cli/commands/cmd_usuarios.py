@@ -1,31 +1,43 @@
 """
 Usuarios
 
+- actualizar-crup: Actualiza la curp desde Perso buscada por nombres completos
 - alimentar-notarias: Insertar notarias a partir de un archivo CSV
 - estandarizar: Estandarizar nombres, apellidos y puestos en mayusculas
 - mostrar_api_key: Mostrar API Key
 - nueva_api_key: Nueva API Key
 - nueva_contrasena: Nueva contraseña
+- reporte: Reporte de usuarios modificados a un archivo CSV
 - sincronizar: Sincronizar con la API de RRHH Personal
 """
+
 from datetime import datetime, timedelta
 from pathlib import Path
-
-import csv
 import click
+import csv
+import os
+import re
+import requests
+import sys
+
+from dotenv import load_dotenv
 
 from lib.pwgen import generar_api_key, generar_contrasena
-from lib.safe_string import safe_string
-
+from lib.safe_string import safe_string, safe_curp
 from plataforma_web.app import create_app
 from plataforma_web.extensions import db
-
 from plataforma_web.blueprints.autoridades.models import Autoridad
 from plataforma_web.blueprints.oficinas.models import Oficina
 from plataforma_web.blueprints.roles.models import Rol
 from plataforma_web.blueprints.usuarios.models import Usuario
 from plataforma_web.blueprints.usuarios_roles.models import UsuarioRol
 from plataforma_web.extensions import pwd_context
+
+load_dotenv()  # Take environment variables from .env
+
+PERSEO_API_URL = os.getenv("PERSEO_API_URL")
+PERSEO_API_KEY = os.getenv("PERSEO_API_KEY")
+TIMEOUT = 12
 
 app = create_app()
 db.app = app
@@ -178,10 +190,169 @@ def nueva_contrasena(email):
 
 
 @click.command()
+@click.argument("desde", type=str)
+@click.argument("hasta", type=str)
+@click.option("--output", default="usuarios_modificados.csv", type=str, help="Archivo CSV a escribir")
+def reporte(desde, hasta, output):
+    """Reporte de usuarios modificados a un archivo CSV"""
+    # Validar el archivo CSV a escribir, que no exista
+    ruta = Path(output)
+    if ruta.exists():
+        click.echo(f"AVISO: {output} existe, no voy a sobreescribirlo.")
+        return
+    # Validar que el parametro desde sea YYYY-MM-DD
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", desde):
+        click.echo(f"ERROR: {desde} no es una fecha valida (YYYY-MM-DD)")
+        return
+    # Validar que el parametro hasta sea YYYY-MM-DD
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", hasta):
+        click.echo(f"ERROR: {hasta} no es una fecha valida (YYYY-MM-DD)")
+        return
+    # Validar que la fecha desde sea menor que la fecha hasta
+    if desde > hasta:
+        click.echo(f"ERROR: {desde} es mayor que {hasta}")
+        return
+    # Consultar usuarios
+    click.echo("Elaborando reporte de usuarios...")
+    contador = 0
+    usuarios = Usuario.query
+    if desde:
+        usuarios = usuarios.filter(Usuario.modificado >= f"{desde} 00:00:00")
+    if hasta:
+        usuarios = usuarios.filter(Usuario.modificado <= f"{hasta} 23:59:59")
+    usuarios = usuarios.order_by(Usuario.modificado).all()
+    with open(ruta, "w", encoding="utf8") as puntero:
+        respaldo = csv.writer(puntero)
+        respaldo.writerow(
+            [
+                "Fecha",
+                "Nombre Completo",
+                "CURP",
+                "Correo Electrónico",
+                "Autoridad",
+                "Oficina",
+                "Roles",
+                "Operacion",
+            ]
+        )
+        for usuario in usuarios:
+            # Definir operacion
+            operacion = "ALTA"  # Por defecto, es ALTA
+            if usuario.estatus == "B":
+                operacion = "BAJA"  # Si estatus es B, es BAJA
+            elif usuario.modificado - usuario.creado > timedelta(hours=24):
+                operacion = "CAMBIO"  # Si modificado tiene mas de 24 horas respecto a creado, es CAMBIO
+            # Escribir la linea
+            respaldo.writerow(
+                [
+                    usuario.modificado.strftime("%Y-%m-%d %H:%M:%S"),
+                    usuario.nombre,
+                    usuario.curp,
+                    usuario.email,
+                    usuario.autoridad.clave,
+                    usuario.oficina.clave,
+                    ", ".join(usuario.get_roles()),
+                    operacion,
+                ]
+            )
+            contador += 1
+            if contador % 100 == 0:
+                click.echo(f"  Van {contador}...")
+    click.echo(f"  {contador} en {ruta.name}")
+
+
+@click.command()
 def sincronizar():
     """Sincronizar con la API de RRHH Personal"""
     app.task_queue.enqueue("plataforma_web.blueprints.usuarios.tasks.sincronizar")
     click.echo("Sincronizar se está ejecutando en el fondo.")
+
+
+@click.command()
+def actualizar_curp():
+    """Actualiza la CURP de la API de Perseo preguntando con el nombre y apellidos"""
+    click.echo("Actualizando CURP's desde Perseo...")
+
+    # Validar que se haya definido PERSEO_URL.
+    if PERSEO_API_URL is None:
+        click.echo("ERROR: No se ha definido PERSEO_URL.")
+        sys.exit(1)
+
+    # Validar que se haya definido PERSEO_API_KEY.
+    if PERSEO_API_KEY is None:
+        click.echo("ERROR: No se ha definido PERSEO_API_KEY.")
+        sys.exit(1)
+
+    # Bucle por Usuarios
+    contador = 0
+    contador_nuevos = 0
+    contador_cambios = 0
+    contador_errores = 0
+    for usuario in Usuario.query.filter_by(estatus="A").order_by(Usuario.id).all():
+        nombre_completo = f"{usuario.nombres} {usuario.apellido_paterno} {usuario.apellido_materno}"
+        # Consultar a la API
+        try:
+            respuesta = requests.get(
+                f"{PERSEO_API_URL}/v4/personas",
+                headers={"X-Api-Key": PERSEO_API_KEY},
+                params={"nombres": usuario.nombres, "apellido_primero": usuario.apellido_paterno, "apellido_segundo": usuario.apellido_materno},
+                timeout=TIMEOUT,
+            )
+            respuesta.raise_for_status()
+        except requests.exceptions.ConnectionError:
+            click.echo("ERROR: No hubo respuesta al solicitar usuario")
+            sys.exit(1)
+        except requests.exceptions.HTTPError as error:
+            click.echo("ERROR: Status Code al solicitar usuario: " + str(error))
+            sys.exit(1)
+        except requests.exceptions.RequestException:
+            click.echo("ERROR: Inesperado al solicitar usuario")
+            sys.exit(1)
+        datos = respuesta.json()
+        if "success" not in datos:
+            click.echo("ERROR: Fallo al solicitar usuario")
+            sys.exit(1)
+        if datos["success"] is False:
+            if "message" in datos:
+                click.echo(f"  AVISO: Fallo el usuario {nombre_completo}: {datos['message']}")
+            else:
+                click.echo(f"  AVISO: Fallo el usuario {nombre_completo}")
+            contador_errores = contador_errores + 1
+            continue
+
+        # Si no contiene resultados, saltar
+        if len(datos["items"]) == 0:
+            continue
+        item = datos["items"][0]
+
+        # Actualizar datos de lo obtenido
+        curp = None
+        try:
+            curp = safe_curp(item["curp"])
+        except ValueError:
+            click.echo("  AVISO: CURP inválida.")
+            contador_errores = contador_errores + 1
+            continue
+
+        # Revisamos si la curp es nueva o cambió.
+        if usuario.curp == "":
+            usuario.curp = curp
+            contador_nuevos = contador_nuevos + 1
+            usuario.save()
+        elif usuario.curp != curp:
+            usuario.curp = curp
+            contador_cambios = contador_cambios + 1
+            usuario.save()
+
+        # Llevamos la cuenta de cuantos registros han sido procesados
+        contador += 1
+        if contador % 100 == 0:
+            click.echo(f"  Van {contador}...")
+
+    # Mensaje de termino
+    click.echo(f"Hubo {contador_nuevos} CURP's nuevos copiados.")
+    click.echo(f"Hubo {contador_cambios} CURP's actualizados.")
+    click.echo(f"Hubo {contador_errores} errores.")
 
 
 cli.add_command(alimentar_notarias)
@@ -189,4 +360,6 @@ cli.add_command(estandarizar)
 cli.add_command(mostrar_api_key)
 cli.add_command(nueva_api_key)
 cli.add_command(nueva_contrasena)
+cli.add_command(reporte)
 cli.add_command(sincronizar)
+cli.add_command(actualizar_curp)

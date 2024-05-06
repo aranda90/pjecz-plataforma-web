@@ -1,6 +1,7 @@
 """
 Materias, modelos
 """
+
 from plataforma_web.extensions import db
 from lib.universal_mixin import UniversalMixin
 
@@ -16,10 +17,12 @@ class Materia(db.Model, UniversalMixin):
 
     # Columnas
     nombre = db.Column(db.String(64), unique=True, nullable=False)
+    descripcion = db.Column(db.String(1024), nullable=False)
     en_sentencias = db.Column(db.Boolean, nullable=False, default=False)
 
     # Hijos
     autoridades = db.relationship("Autoridad", back_populates="materia", lazy="noload")
+    exh_exhortos = db.relationship("ExhExhorto", back_populates="materia", lazy="noload")
     materias_tipos_juicios = db.relationship("MateriaTipoJuicio", back_populates="materia")
     tesis_jurisprudencias = db.relationship("TesisJurisprudencia", back_populates="materia", lazy="noload")
     siga_grabaciones = db.relationship("SIGAGrabacion", back_populates="materia", lazy="noload")

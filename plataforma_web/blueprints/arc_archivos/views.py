@@ -54,6 +54,7 @@ def list_active():
             estatus="A",
             titulo="Archivo - Bandeja de Entrada 📥",
             estados_solicitudes=ArcSolicitud.ESTADOS,
+            distritos_solicitudes=Distrito.query.filter_by(es_distrito=True).filter_by(estatus="A").all(),
             estados_remesas=ArcRemesa.ESTADOS,
             rol_archivista=ROL_ARCHIVISTA,
             mostrar_btn_local_global="LOCAL",
@@ -68,6 +69,7 @@ def list_active():
             estatus="A",
             titulo="Archivo - Bandeja de Entrada 📥",
             estados_solicitudes=ArcSolicitud.ESTADOS,
+            distritos_solicitudes=Distrito.query.filter_by(es_distrito=True).filter_by(estatus="A").all(),
             estados_remesas=ArcRemesa.ESTADOS,
             rol_archivista=ROL_ARCHIVISTA,
             mostrar_btn_local_global="LOCAL",
@@ -82,6 +84,7 @@ def list_active():
             estatus="A",
             titulo="Archivo - Bandeja de Entrada 📥",
             estados_solicitudes=ArcSolicitud.ESTADOS,
+            distritos_solicitudes=Distrito.query.filter_by(es_distrito=True).filter_by(estatus="A").all(),
             estados_remesas=ArcRemesa.ESTADOS,
             rol_archivista=ROL_ARCHIVISTA,
             mostrar_btn_historial="IR_AL_HISTORIAL",
@@ -323,6 +326,18 @@ def stats_solicitudes():
                     }
                 ),
             )
+        elif "por_estados" in request.form:
+            return render_template(
+                "arc_archivos/stats_solicitudes_por_estados.jinja2",
+                fecha_desde=fecha_desde,
+                fecha_hasta=fecha_hasta,
+                filtros_por_estados=json.dumps(
+                    {
+                        "fecha_desde": fecha_desde.strftime("%Y-%m-%d"),
+                        "fecha_hasta": fecha_hasta.strftime("%Y-%m-%d"),
+                    }
+                ),
+            )
     # Redirigimos a página índice de estadísticas
     return redirect(url_for("arc_archivos.stats"))
 
@@ -379,6 +394,18 @@ def stats_remesas():
                 fecha_desde=fecha_desde,
                 fecha_hasta=fecha_hasta,
                 filtros_por_archivistas=json.dumps(
+                    {
+                        "fecha_desde": fecha_desde.strftime("%Y-%m-%d"),
+                        "fecha_hasta": fecha_hasta.strftime("%Y-%m-%d"),
+                    }
+                ),
+            )
+        elif "por_estados" in request.form:
+            return render_template(
+                "arc_archivos/stats_remesas_por_estados.jinja2",
+                fecha_desde=fecha_desde,
+                fecha_hasta=fecha_hasta,
+                filtros_por_estados=json.dumps(
                     {
                         "fecha_desde": fecha_desde.strftime("%Y-%m-%d"),
                         "fecha_hasta": fecha_hasta.strftime("%Y-%m-%d"),
@@ -574,6 +601,42 @@ def datatable_json_solicitudes_por_archivistas():
     return output_datatable_json(draw, total, data)
 
 
+@arc_archivos.route("/arc_archivos/datatable_json_solicitudes_por_estados", methods=["GET", "POST"])
+def datatable_json_solicitudes_por_estados():
+    """DataTable JSON para listado de solicitudes y remesas por estados"""
+    # Tomar parámetros de Datatables
+    draw, start, rows_per_page = get_datatable_parameters()
+    # SQLAlchemy database session
+    database = current_app.extensions["sqlalchemy"].db.session
+    # Dos columnas en la consulta
+    consulta = database.query(
+        ArcSolicitud.estado.label("estados"),
+        count("*").label("solicitudes"),
+    )
+    # Consultar
+    consulta = consulta.select_from(ArcSolicitud)
+    if "fecha_desde" in request.form:
+        consulta = consulta.filter(ArcSolicitud.creado >= request.form["fecha_desde"])
+    if "fecha_hasta" in request.form:
+        consulta = consulta.filter(ArcSolicitud.creado <= request.form["fecha_hasta"])
+    consulta = consulta.filter(ArcSolicitud.estatus == "A")
+    consulta = consulta.group_by(ArcSolicitud.estado)
+    consulta = consulta.order_by(ArcSolicitud.estado)
+    resultado = consulta.offset(start).limit(rows_per_page).all()
+    total = consulta.count()
+    # Elaborar datos para DataTable
+    data = []
+    for registro in resultado:
+        data.append(
+            {
+                "estados": registro.estados,
+                "solicitudes": registro.solicitudes,
+            }
+        )
+    # Entregar JSON
+    return output_datatable_json(draw, total, data)
+
+
 @arc_archivos.route("/arc_archivos/datatable_json_remesas_por_archivistas", methods=["GET", "POST"])
 def datatable_json_remesas_por_archivistas():
     """DataTable JSON para listado de remesas y remesas por archivistas"""
@@ -604,6 +667,42 @@ def datatable_json_remesas_por_archivistas():
         data.append(
             {
                 "archivistas": registro.archivistas,
+                "remesas": registro.remesas,
+            }
+        )
+    # Entregar JSON
+    return output_datatable_json(draw, total, data)
+
+
+@arc_archivos.route("/arc_archivos/datatable_json_remesas_por_estados", methods=["GET", "POST"])
+def datatable_json_remesas_por_estados():
+    """DataTable JSON para listado de remesas y remesas por estados"""
+    # Tomar parámetros de Datatables
+    draw, start, rows_per_page = get_datatable_parameters()
+    # SQLAlchemy database session
+    database = current_app.extensions["sqlalchemy"].db.session
+    # Dos columnas en la consulta
+    consulta = database.query(
+        ArcRemesa.estado.label("estados"),
+        count("*").label("remesas"),
+    )
+    # Consultar
+    consulta = consulta.select_from(ArcRemesa)
+    if "fecha_desde" in request.form:
+        consulta = consulta.filter(ArcRemesa.creado >= request.form["fecha_desde"])
+    if "fecha_hasta" in request.form:
+        consulta = consulta.filter(ArcRemesa.creado <= request.form["fecha_hasta"])
+    consulta = consulta.filter(ArcRemesa.estatus == "A").filter(ArcRemesa.estatus == "A")
+    consulta = consulta.group_by(ArcRemesa.estado)
+    consulta = consulta.order_by(ArcRemesa.estado)
+    resultado = consulta.offset(start).limit(rows_per_page).all()
+    total = consulta.count()
+    # Elaborar datos para DataTable
+    data = []
+    for registro in resultado:
+        data.append(
+            {
+                "estados": registro.estados,
                 "remesas": registro.remesas,
             }
         )
