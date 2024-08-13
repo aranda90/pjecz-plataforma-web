@@ -3,17 +3,26 @@ CID Procedimientos, vistas
 """
 
 import json
+from datetime import datetime, timezone
 from delta import html
 from flask import abort, Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
-from sqlalchemy import or_
+from sqlalchemy import or_, not_
 
 from lib.datatables import get_datatable_parameters, output_datatable_json
 from lib.safe_string import safe_clave, safe_email, safe_string, safe_message
 
 from plataforma_web.blueprints.autoridades.models import Autoridad
 from plataforma_web.blueprints.bitacoras.models import Bitacora
-from plataforma_web.blueprints.cid_procedimientos.forms import CIDProcedimientoForm, CIDProcedimientoAcceptRejectForm, CIDProcedimientoEditAdminForm, CIDProcedimientoSearchForm, CIDProcedimientoCambiarAreaForm
+from plataforma_web.blueprints.cid_procedimientos.forms import (
+    CIDProcedimientoForm,
+    CIDProcedimientoEditForm,
+    CIDProcedimientoAcceptRejectForm,
+    CIDProcedimientoEditAdminForm,
+    CIDProcedimientoSearchForm,
+    CIDProcedimientoCambiarAreaForm,
+    CIDProcedimientosNewReview,
+)
 from plataforma_web.blueprints.cid_procedimientos.models import CIDProcedimiento
 from plataforma_web.blueprints.cid_areas.models import CIDArea
 from plataforma_web.blueprints.cid_areas_autoridades.models import CIDAreaAutoridad
@@ -31,11 +40,13 @@ cid_procedimientos = Blueprint("cid_procedimientos", __name__, template_folder="
 MODULO = "CID PROCEDIMIENTOS"
 
 # Roles que deben estar en la base de datos
+ROL_ADMINISTRADOR = "ADMINISTRADOR"
 ROL_COORDINADOR = "SICGD COORDINADOR"
 ROL_DIRECTOR_JEFE = "SICGD DIRECTOR O JEFE"
 ROL_DUENO_PROCESO = "SICGD DUENO DE PROCESO"
 ROL_INVOLUCRADO = "SICGD INVOLUCRADO"
 ROLES_CON_PROCEDIMIENTOS_PROPIOS = (ROL_COORDINADOR, ROL_DIRECTOR_JEFE, ROL_DUENO_PROCESO)
+ROLES_NUEVA_REVISION = (ROL_COORDINADOR, ROL_DUENO_PROCESO)
 
 
 @cid_procedimientos.before_request
@@ -71,6 +82,8 @@ def datatable_json():
         consulta = consulta.filter(CIDProcedimiento.titulo_procedimiento.contains(safe_string(request.form["titulo_procedimiento"])))
     if "usuario_id" in request.form:
         consulta = consulta.filter(CIDProcedimiento.usuario_id == request.form["usuario_id"])
+    if "seguimiento_posterior" in request.form:
+        consulta = consulta.filter(CIDProcedimiento.seguimiento_posterior != request.form["seguimiento_posterior"])
     # if "seguimiento_filtro" in request.form:
     #     consulta = consulta.filter(CIDProcedimiento.seguimiento.contains(request.form["seguimiento_filtro"]))
     # if "fecha_desde" in request.form:
@@ -93,11 +106,10 @@ def datatable_json():
         data.append(
             {
                 "detalle": {
-                    "id": resultado.id,
+                    "id": resultado.codigo,
                     "url": url_for("cid_procedimientos.detail", cid_procedimiento_id=resultado.id),
                 },
                 "titulo_procedimiento": resultado.titulo_procedimiento,
-                "codigo": resultado.codigo,
                 "revision": resultado.revision,
                 "elaboro_nombre": resultado.elaboro_email,
                 "fecha": resultado.fecha.strftime("%Y-%m-%d"),
@@ -145,6 +157,8 @@ def datatable_json_admin():
         consulta = consulta.filter(CIDProcedimiento.titulo_procedimiento.contains(safe_string(request.form["titulo_procedimiento"])))
     if "usuario_id" in request.form:
         consulta = consulta.filter(CIDProcedimiento.usuario_id == request.form["usuario_id"])
+    if "seguimiento_posterior" in request.form:
+        consulta = consulta.filter(CIDProcedimiento.seguimiento_posterior != request.form["seguimiento_posterior"])
     # if "seguimiento_filtro" in request.form:
     #     consulta = consulta.filter(CIDProcedimiento.seguimiento.contains(request.form["seguimiento_filtro"]))
     # if "fecha_desde" in request.form:
@@ -205,27 +219,29 @@ def list_active():
     # Consultar los roles del usuario
     current_user_roles = set(current_user.get_roles())
     # Si es administrador, usar list_admin.jinja2
-    if current_user.can_admin(MODULO):
+    if current_user.can_admin(MODULO) and ROL_ADMINISTRADOR in current_user_roles:
         return render_template(
             "cid_procedimientos/list_admin.jinja2",
             titulo="Procedimientos autorizados de mis áreas",
             filtros=json.dumps({"estatus": "A", "seguimiento": "AUTORIZADO", "cid_areas": cid_areas_ids}),
             estatus="A",
             show_button_list_owned=current_user_roles.intersection(ROLES_CON_PROCEDIMIENTOS_PROPIOS),
-            show_button_list_all=True,
+            show_button_list_all=ROL_COORDINADOR in current_user_roles,
             show_button_list_all_autorized=True,
-            show_button_my_autorized=True,
+            show_button_my_autorized=False,
+            show_lista_maestra=ROL_COORDINADOR in current_user_roles,
         )
     # De lo contrario, usar list.jinja2
     return render_template(
         "cid_procedimientos/list.jinja2",
         titulo="Procedimientos autorizados de mis áreas",
-        filtros=json.dumps({"estatus": "A", "seguimiento": "AUTORIZADO", "cid_areas": cid_areas_ids}),
+        filtros=json.dumps({"estatus": "A", "seguimiento": "AUTORIZADO", "cid_areas": cid_areas_ids, "seguimiento_posterior": "ARCHIVADO"}),
         estatus="A",
         show_button_list_owned=current_user_roles.intersection(ROLES_CON_PROCEDIMIENTOS_PROPIOS),
-        show_button_list_all=ROL_COORDINADOR in current_user_roles,
+        show_button_list_all=current_user.can_admin(MODULO) or ROL_COORDINADOR in current_user_roles,
         show_button_list_all_autorized=True,
-        show_button_my_autorized=True,
+        show_button_my_autorized=False,
+        show_lista_maestra=current_user.can_admin(MODULO) or ROL_COORDINADOR in current_user_roles,
     )
 
 
@@ -235,57 +251,65 @@ def list_authorized():
     # Consultar los roles del usuario
     current_user_roles = set(current_user.get_roles())
     # Si es administrador, usar list_admin.jinja2
-    if current_user.can_admin(MODULO):
+    if current_user.can_admin(MODULO) and ROL_ADMINISTRADOR in current_user_roles:
         return render_template(
             "cid_procedimientos/list_admin.jinja2",
             titulo="Todos los procedimientos autorizados",
-            filtros=json.dumps({"estatus": "A", "seguimiento": "AUTORIZADO"}),
+            filtros=json.dumps({"estatus": "A", "seguimiento": "AUTORIZADO", "seguimiento_posterior": "ARCHIVADO"}),
             estatus="A",
             show_button_list_owned=current_user_roles.intersection(ROLES_CON_PROCEDIMIENTOS_PROPIOS),
-            show_button_list_all=True,
-            show_button_list_all_autorized=True,
+            show_button_list_all=ROL_COORDINADOR in current_user_roles,
+            show_button_list_all_autorized=False,
             show_button_my_autorized=True,
+            show_lista_maestra=ROL_COORDINADOR in current_user_roles,
         )
     # De lo contrario, usar list.jinja2
     return render_template(
         "cid_procedimientos/list.jinja2",
         titulo="Todos los procedimientos autorizados",
-        filtros=json.dumps({"estatus": "A", "seguimiento": "AUTORIZADO"}),
+        filtros=json.dumps({"estatus": "A", "seguimiento": "AUTORIZADO", "seguimiento_posterior": "ARCHIVADO"}),
         estatus="A",
         show_button_list_owned=current_user_roles.intersection(ROLES_CON_PROCEDIMIENTOS_PROPIOS),
-        show_button_list_all=ROL_COORDINADOR in current_user_roles,
-        show_button_list_all_autorized=True,
+        show_button_list_all=current_user.can_admin(MODULO) or ROL_COORDINADOR in current_user_roles,
+        show_button_list_all_autorized=False,
         show_button_my_autorized=True,
+        show_lista_maestra=current_user.can_admin(MODULO) or ROL_COORDINADOR in current_user_roles,
     )
 
 
 @cid_procedimientos.route("/cid_procedimientos/propios")
 def list_owned():
     """Listado de procedimientos propios"""
+
     # Consultar los roles del usuario
     current_user_roles = set(current_user.get_roles())
+
     # Si es administrador, usar list_admin.jinja2
-    if current_user.can_admin(MODULO):
+    if current_user.can_admin(MODULO) and ROL_ADMINISTRADOR in current_user_roles:
         return render_template(
             "cid_procedimientos/list_admin.jinja2",
+            # cid_procedimiento=procedimientos_archivados_list,
             titulo="Procedimientos propios",
-            filtros=json.dumps({"estatus": "A", "usuario_id": current_user.id}),
+            filtros=json.dumps({"estatus": "A", "usuario_id": current_user.id, "seguimiento_posterior": "ARCHIVADO"}),
             estatus="A",
-            show_button_list_owned=current_user_roles.intersection(ROLES_CON_PROCEDIMIENTOS_PROPIOS),
+            show_button_list_owned=False,
             show_button_list_all=ROL_COORDINADOR in current_user_roles,
             show_button_list_all_autorized=True,
             show_button_my_autorized=True,
+            show_lista_maestra=ROL_COORDINADOR in current_user_roles,
         )
     # De lo contrario, usar list.jinja2
     return render_template(
         "cid_procedimientos/list.jinja2",
+        # cid_procedimiento=procedimientos_archivados_list,
         titulo="Procedimientos propios",
-        filtros=json.dumps({"estatus": "A", "usuario_id": current_user.id}),
+        filtros=json.dumps({"estatus": "A", "usuario_id": current_user.id, "seguimiento_posterior": "ARCHIVADO"}),
         estatus="A",
-        show_button_list_owned=current_user_roles.intersection(ROLES_CON_PROCEDIMIENTOS_PROPIOS),
-        show_button_list_all=ROL_COORDINADOR in current_user_roles,
+        show_button_list_owned=False,
+        show_button_list_all=current_user.can_admin(MODULO) or ROL_COORDINADOR in current_user_roles,
         show_button_list_all_autorized=True,
         show_button_my_autorized=True,
+        show_lista_maestra=current_user.can_admin(MODULO) or ROL_COORDINADOR in current_user_roles,
     )
 
 
@@ -293,15 +317,31 @@ def list_owned():
 @permission_required(MODULO, Permiso.ADMINISTRAR)
 def list_all_active():
     """Listado de procedimientos activos, solo para administrador"""
+    # Consultar los roles del usuario
+    current_user_roles = set(current_user.get_roles())
+    # Si es administrador, usar list_admin.jinja2
+    if current_user.can_admin(MODULO) and ROL_ADMINISTRADOR in current_user_roles:
+        return render_template(
+            "cid_procedimientos/list_admin.jinja2",
+            titulo="Todos los procedimientos activos",
+            filtros=json.dumps({"estatus": "A"}),
+            estatus="A",
+            show_button_list_owned=True,
+            show_button_list_all=False,
+            show_button_list_all_autorized=True,
+            show_button_my_autorized=True,
+            show_lista_maestra=True,
+        )
     return render_template(
-        "cid_procedimientos/list_admin.jinja2",
+        "cid_procedimientos/list.jinja2",
         titulo="Todos los procedimientos activos",
         filtros=json.dumps({"estatus": "A"}),
         estatus="A",
         show_button_list_owned=True,
-        show_button_list_all=True,
+        show_button_list_all=False,
         show_button_list_all_autorized=True,
         show_button_my_autorized=True,
+        show_lista_maestra=True,
     )
 
 
@@ -309,21 +349,26 @@ def list_all_active():
 @permission_required(MODULO, Permiso.ADMINISTRAR)
 def list_all_inactive():
     """Listado de procedimientos eliminados, solo para administrador"""
+    # Consultar los roles del usuario
+    current_user_roles = set(current_user.get_roles())
     return render_template(
         "cid_procedimientos/list_admin.jinja2",
         titulo="Todos los procedimientos eliminados",
         filtros=json.dumps({"estatus": "B"}),
         estatus="B",
         show_button_list_owned=True,
-        show_button_list_all=True,
+        show_button_list_all=current_user.can_admin(MODULO) or ROL_COORDINADOR in current_user_roles,
         show_button_list_all_autorized=True,
         show_button_my_autorized=True,
+        show_lista_maestra=current_user.can_admin(MODULO) or ROL_COORDINADOR in current_user_roles,
     )
 
 
 @cid_procedimientos.route("/cid_procedimientos/<int:cid_procedimiento_id>")
 def detail(cid_procedimiento_id):
     """Detalle de un CID Procedimiento"""
+    # Consultar los roles del usuario
+    current_user_roles = set(current_user.get_roles())
     cid_procedimiento = CIDProcedimiento.query.get_or_404(cid_procedimiento_id)
     cid_formatos = CIDFormato.query.filter(CIDFormato.procedimiento == cid_procedimiento).filter(CIDFormato.estatus == "A").order_by(CIDFormato.id).all()
     return render_template(
@@ -341,6 +386,7 @@ def detail(cid_procedimiento_id):
         cid_formatos=cid_formatos,
         show_button_edit_admin=current_user.can_admin(MODULO) or ROL_COORDINADOR in current_user.get_roles(),
         show_button_cambiar_area=current_user.can_admin(MODULO) or ROL_COORDINADOR in current_user.get_roles(),
+        show_buttom_new_revision=current_user_roles.intersection(ROLES_NUEVA_REVISION),
     )
 
 
@@ -437,7 +483,7 @@ def edit(cid_procedimiento_id):
     if cid_procedimiento.seguimiento not in ["EN ELABORACION", "EN REVISION", "EN AUTORIZACION"]:
         flash(f"No puede editar porque su seguimiento es {cid_procedimiento.seguimiento} y ha sido FIRMADO. ", "warning")
         return redirect(url_for("cid_procedimientos.detail", cid_procedimiento_id=cid_procedimiento_id))
-    form = CIDProcedimientoForm()
+    form = CIDProcedimientoEditForm()
     if form.validate_on_submit():
         elaboro = form.elaboro_email.data
         if elaboro is None or elaboro == "":
@@ -470,9 +516,18 @@ def edit(cid_procedimiento_id):
             control_cambios = {}
         else:
             control_cambios = control
+        # Si el campo revision está vacío o es None, asignar un valor predeterminado
+        revision = form.revision.data
+        if revision is None:
+            revision = 1
+        # Asegurar que el campo codigo tenga un valor válido
+        codigo = form.codigo.data
+        if not codigo:  # Verificar si es None o una cadena vacía
+            codigo = cid_procedimiento.codigo  # Mantener el valor original si no se envió uno nuevo
+            print("se ejecuto")
         cid_procedimiento.titulo_procedimiento = safe_string(form.titulo_procedimiento.data)
-        cid_procedimiento.codigo = safe_clave(form.codigo.data)
-        cid_procedimiento.revision = form.revision.data
+        cid_procedimiento.codigo = safe_clave(codigo)
+        cid_procedimiento.revion = revision
         cid_procedimiento.fecha = form.fecha.data
         cid_procedimiento.objetivo = form.objetivo.data
         cid_procedimiento.alcance = form.alcance.data
@@ -633,44 +688,6 @@ def validate_json_quill_not_empty(data):
         return False
 
 
-@cid_procedimientos.route("/cid_procedimientos/buscar", methods=["GET", "POST"])
-def search():
-    """Buscar Cid Procedimientos"""
-    form_search = CIDProcedimientoSearchForm()
-    if form_search.validate_on_submit():
-        busqueda = {"estatus": "A"}
-        titulos = []
-        # Si se busca por el ID y se encuentra, se redirecciona al detalle
-        if form_search.id.data:
-            cid_procedimiento_id = int(form_search.id.data)
-            if cid_procedimiento_id != 0:
-                cid_procedimiento = CIDProcedimiento.query.get(cid_procedimiento_id)
-                if cid_procedimiento is not None:
-                    return redirect(url_for("cid_procedimientos.detail", cid_procedimiento_id=cid_procedimiento.id))
-        if form_search.titulo_procedimiento.data:
-            titulo_procedimiento = safe_string(form_search.titulo_procedimiento.data)
-            if titulo_procedimiento != "":
-                busqueda["titulo_procedimiento"] = titulo_procedimiento
-                titulos.append("titulo_procedimiento " + titulo_procedimiento)
-        if form_search.codigo.data:
-            codigo = safe_string(form_search.codigo.data)
-            if codigo != "":
-                busqueda["codigo"] = codigo
-                titulos.append("codigo " + codigo)
-        if form_search.elaboro_nombre.data:
-            elaboro_nombre = safe_string(form_search.elaboro_nombre.data, save_enie=True)
-            if elaboro_nombre != "":
-                busqueda["elaboro_nombre"] = elaboro_nombre
-                titulos.append("elaboro_nombre " + elaboro_nombre)
-        return render_template(
-            "cid_procedimientos/list.jinja2",
-            filtros=json.dumps(busqueda),
-            titulo="Cid Procedimientos con " + ", ".join(titulos),
-            estatus="A",
-        )
-    return render_template("cid_procedimientos/search.jinja2", form=form_search)
-
-
 @cid_procedimientos.route("/cid_procedimientos/firmar/<int:cid_procedimiento_id>")
 @permission_required(MODULO, Permiso.MODIFICAR)
 def sign_for_maker(cid_procedimiento_id):
@@ -737,12 +754,12 @@ def sign_for_maker(cid_procedimiento_id):
     else:
         tarea = current_user.launch_task(
             comando="cid_procedimientos.tasks.crear_pdf",
-            mensaje=f"Crear archivo PDF de {cid_procedimiento.titulo_procedimiento}",
+            mensaje=f"Se esta creando PDF de {cid_procedimiento.titulo_procedimiento}",
             usuario_id=current_user.id,
             cid_procedimiento_id=cid_procedimiento.id,
             accept_reject_url=url_for("cid_procedimientos.accept_reject", cid_procedimiento_id=cid_procedimiento.id),
         )
-        flash(f"{tarea.descripcion} está corriendo en el fondo.", "info")
+        flash(f"{tarea.descripcion} y esta corriendo en el fondo. Esta página se va recargar en 20 segundos...", "info")
     return redirect(url_for("cid_procedimientos.detail", cid_procedimiento_id=cid_procedimiento.id))
 
 
@@ -952,6 +969,137 @@ def help_quill(seccion: str):
     data = json.load(archivo_ayuda)
     archivo_ayuda.close()
     return render_template("quill_help.jinja2", titulo=data["titulo"], descripcion=data["descripcion"], secciones=data["secciones"], seccion_id=seccion)
+
+
+@cid_procedimientos.route("/cid_procedimientos/copiar_revision/<int:cid_procedimiento_id>", methods=["GET", "POST"])
+@permission_required(MODULO, Permiso.MODIFICAR)
+def copiar_procedimiento_con_revision(cid_procedimiento_id):
+    """Copiar CID Procedimiento con nueva revisión"""
+    # Obtener el CID Procedimiento correspondiente o devolver error 404 si no existe
+    cid_procedimiento = CIDProcedimiento.query.get_or_404(cid_procedimiento_id)
+    # Verificar que tanto seguimiento como seguimiento_posterior sean AUTORIZADO
+    if cid_procedimiento.seguimiento != "AUTORIZADO" or cid_procedimiento.seguimiento_posterior != "AUTORIZADO":
+        flash("No se puede copiar el procedimiento hasta que ambos seguimientos estén en 'AUTORIZADO'.", "danger")
+        return redirect(url_for("cid_procedimientos.detail", cid_procedimiento_id=cid_procedimiento.id))
+    # Obtener la última revisión
+    ultima_revision = CIDProcedimiento.query.filter_by(id=cid_procedimiento.id).order_by(CIDProcedimiento.revision.desc()).first()
+
+    # Obtener el número de revisión actual
+    numero_revision_actual = cid_procedimiento.revision
+
+    # Crear un formulario para la nueva revisión
+    form = CIDProcedimientosNewReview()
+    # Si el formulario ha sido enviado y es válido
+    if form.validate_on_submit():
+        reviso = form.reviso_email.data
+        if reviso is None or reviso == "":
+            reviso_nombre = ""
+            reviso_email = ""
+        else:
+            reviso_nombre = form.reviso_nombre.data
+            reviso_email = reviso
+        aprobo = form.aprobo_email.data
+        if aprobo is None or aprobo == "":
+            aprobo_nombre = ""
+            aprobo_email = ""
+        else:
+            aprobo_nombre = form.aprobo_nombre.data
+            aprobo_email = aprobo
+        # Acceder a los datos del formulario
+        cid_procedimiento.titulo_prcedimiento = safe_string(form.titulo_procedimiento.data)
+        cid_procedimiento.codigo = form.codigo.data
+        cid_procedimiento.revision = form.revision.data
+        cid_procedimiento.fecha = form.fecha.data if form.fecha.data else datetime.now(timezone.utc)
+        cid_procedimiento.reviso_nombre = safe_string(reviso_nombre, save_enie=True)
+        cid_procedimiento.reviso_puesto = safe_string(form.reviso_puesto.data)
+        cid_procedimiento.reviso_email = safe_email(reviso_email)
+        cid_procedimiento.aprobo_nombre = safe_string(aprobo_nombre, save_enie=True)
+        cid_procedimiento.aprobo_puesto = safe_string(form.aprobo_puesto.data)
+        cid_procedimiento.aprobo_email = safe_email(aprobo_email)
+
+        # Crear una nueva copia del procedimiento con los datos actualizados
+        nueva_copia = CIDProcedimiento(
+            autoridad=cid_procedimiento.autoridad,
+            usuario=current_user,
+            titulo_procedimiento=safe_string(form.titulo_procedimiento.data),
+            codigo=form.codigo.data,
+            revision=form.revision.data,
+            fecha=form.fecha.data if form.fecha.data else datetime.now(timezone.utc),
+            objetivo=cid_procedimiento.objetivo,
+            alcance=cid_procedimiento.alcance,
+            documentos=cid_procedimiento.documentos,
+            definiciones=cid_procedimiento.definiciones,
+            responsabilidades=cid_procedimiento.responsabilidades,
+            desarrollo=cid_procedimiento.desarrollo,
+            registros=cid_procedimiento.registros,
+            elaboro_nombre=cid_procedimiento.elaboro_nombre,
+            elaboro_puesto=cid_procedimiento.elaboro_puesto,
+            elaboro_email=cid_procedimiento.elaboro_email,
+            reviso_nombre=cid_procedimiento.reviso_nombre,
+            reviso_puesto=cid_procedimiento.reviso_puesto,
+            reviso_email=cid_procedimiento.reviso_email,
+            aprobo_nombre=cid_procedimiento.aprobo_nombre,
+            aprobo_puesto=cid_procedimiento.aprobo_puesto,
+            aprobo_email=cid_procedimiento.aprobo_email,
+            control_cambios=cid_procedimiento.control_cambios,
+            seguimiento="EN ELABORACION",
+            seguimiento_posterior="EN ELABORACION",
+            cadena=cid_procedimiento.cadena + 1,
+            anterior_id=cid_procedimiento.id,
+            firma="",
+            archivo="",
+            url="",
+            cid_area=cid_procedimiento.cid_area,
+        )
+        # Guardar la nueva copia en la base de datos
+        nueva_copia.save()
+        # Obtener el procedimiento anterior usando su ID, Duplicar los formatos del procedimiento anterior a éste que es el nuevo
+        anterior = CIDProcedimiento.query.get(cid_procedimiento_id)
+        # Verificar si el seguimiento del nuevo procedimiento es "AUTORIZADO"
+        if cid_procedimiento.seguimiento == "AUTORIZADO":
+            # Iterar sobre los formatos del procedimiento anterior
+            for cid_formato in anterior.formatos:
+                # Crear una copia del formato actual y guardarla en la base de datos
+                CIDFormato(
+                    procedimiento=nueva_copia,  # Establecer el nuevo procedimiento como el procedimiento al que pertenecerá este formato
+                    descripcion=cid_formato.descripcion,  # Establecer la descripción del nuevo formato como la misma descripción del formato anterior
+                    archivo=cid_formato.archivo,  # Establecer el archivo del nuevo formato como el mismo archivo del formato anterior
+                    url=cid_formato.url,  # Establecer la URL del nuevo formato como la misma URL del formato anterior
+                    cid_area=cid_formato.cid_area,  # Establecer el área del nuevo formato como la misma área del formato anterior
+                ).save()
+
+        # Actualizar el estado de los procedimientos relacionados a "AUTORIZADO"
+        relacionados_a_archivar = CIDProcedimiento.query.filter((CIDProcedimiento.codigo == cid_procedimiento.codigo) & ((CIDProcedimiento.seguimiento == "AUTORIZADO") | (CIDProcedimiento.seguimiento_posterior == "AUTORIZADO"))).all()
+
+        for relacionado in relacionados_a_archivar:
+            relacionado.seguimiento_posterior = "ARCHIVADO"
+            relacionado.revision = numero_revision_actual  # Mantener la revisión del procedimiento anterior
+            relacionado.save()
+
+        # Bitácora y redirección a la vista de detalle
+        bitacora = Bitacora(
+            modulo=Modulo.query.filter_by(nombre=MODULO).first(),
+            usuario=current_user,
+            descripcion=safe_message(f"Nueva revisión del procedimiento {cid_procedimiento.titulo_procedimiento}."),
+            url=url_for("cid_procedimientos.detail", cid_procedimiento_id=nueva_copia.id),
+        )
+        bitacora.save()
+        flash(bitacora.descripcion, "success")
+        # Redireccionar a la edicion del nuevo id
+        return redirect(url_for("cid_procedimientos.edit", cid_procedimiento_id=nueva_copia.id))
+    # Llenar el formulario con los datos del procedimiento original
+    form.titulo_procedimiento.data = cid_procedimiento.titulo_procedimiento
+    form.codigo.data = cid_procedimiento.codigo
+    form.revision.data = (ultima_revision.revision + 1) if ultima_revision else 1
+    form.fecha.data = datetime.now(timezone.utc)
+    form.reviso_nombre.data = cid_procedimiento.reviso_nombre
+    form.reviso_puesto.data = cid_procedimiento.reviso_puesto
+    form.reviso_email.data = cid_procedimiento.reviso_email
+    form.aprobo_nombre.data = cid_procedimiento.aprobo_nombre
+    form.aprobo_puesto.data = cid_procedimiento.aprobo_puesto
+    form.aprobo_email.data = cid_procedimiento.aprobo_email
+    # Renderizar la plantilla con el formulario y la información del procedimiento
+    return render_template("cid_procedimientos/new_revision.jinja2", form=form, cid_procedimiento=cid_procedimiento)
 
 
 @cid_procedimientos.route("/cid_procedimientos/usuarios_json", methods=["POST"])

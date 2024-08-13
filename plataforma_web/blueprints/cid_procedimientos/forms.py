@@ -3,7 +3,7 @@ CID Procedimientos, formularios
 """
 
 from flask_wtf import FlaskForm
-from wtforms import DateField, IntegerField, StringField, SubmitField, SelectField
+from wtforms import BooleanField, DateField, IntegerField, StringField, SubmitField, SelectField
 from wtforms.ext.sqlalchemy.fields import QuerySelectField
 from wtforms.validators import DataRequired, Length, Optional
 
@@ -30,6 +30,7 @@ class CIDProcedimientoForm(FlaskForm):
     titulo_procedimiento = StringField("Título", validators=[DataRequired(), Length(max=256)])
     codigo = StringField("Código", validators=[DataRequired(), Length(max=16)])
     revision = IntegerField("Revisión (Número entero apartir de 1)", validators=[DataRequired()])
+    # es_nueva_revision = BooleanField("Es nueva revisión")
     fecha = DateField("Fecha de elaboración", validators=[DataRequired()])
     cid_area = StringField("Área")  # Read Only
     # Step Objetivo
@@ -51,14 +52,66 @@ class CIDProcedimientoForm(FlaskForm):
     # Step Autorizaciones
     elaboro_nombre = StringField("Nombre", validators=[Optional(), Length(max=256)])
     elaboro_puesto = StringField("Puesto", validators=[Optional(), Length(max=256)])
-    elaboro_email = SelectField(label="Correo", coerce=str, validators=[Optional()], validate_choice=False)
+    elaboro_email = SelectField(label="Correo electrónico", coerce=str, validators=[Optional()], validate_choice=False)
     reviso_nombre = StringField("Nombre", validators=[Optional(), Length(max=256)])
     reviso_puesto = StringField("Puesto", validators=[Optional(), Length(max=256)])
-    reviso_email = SelectField(label="Correo", coerce=str, validators=[Optional()], validate_choice=False)
+    reviso_email = SelectField(label="Correo electrónico", coerce=str, validators=[Optional()], validate_choice=False)
     aprobo_nombre = StringField("Nombre", validators=[Optional(), Length(max=256)])
     aprobo_puesto = StringField("Puesto", validators=[Optional(), Length(max=256)])
-    aprobo_email = SelectField(label="Correo", coerce=str, validators=[Optional()], validate_choice=False)
+    aprobo_email = SelectField(label="Correo electrónico", coerce=str, validators=[Optional()], validate_choice=False)
     autorizaciones = JSONField("Autorizaciones", validators=[Optional()])
+    # Guardar
+    guardar = SubmitField("Guardar")
+
+
+class CIDProcedimientoEditForm(FlaskForm):
+    """Formulario CID Procedimiento"""
+
+    # Step Encabezado
+    titulo_procedimiento = StringField("Título", validators=[DataRequired(), Length(max=256)])
+    codigo = StringField("Código", validators=[Optional(), Length(max=16)])
+    revision = IntegerField("Revisión (Número entero apartir de 1)", validators=[Optional()])
+    fecha = DateField("Fecha de elaboración", validators=[DataRequired()])
+    cid_area = StringField("Área")  # Read Only
+    # Step Objetivo
+    objetivo = JSONField("Objetivo", validators=[Optional()])
+    # Step Alcance
+    alcance = JSONField("Alcance", validators=[Optional()])
+    # Step Documentos
+    documentos = JSONField("Documentos", validators=[Optional()])
+    # Step Definiciones
+    definiciones = JSONField("Definiciones", validators=[Optional()])
+    # Step Responsabilidades
+    responsabilidades = JSONField("Responsabilidades", validators=[Optional()])
+    # Step Desarrollo
+    desarrollo = JSONField("Desarrollo", validators=[Optional()])
+    # Step Registros
+    registros = JSONField("Registros", validators=[Optional()])
+    # Step Control de Cambios
+    control_cambios = JSONField("Control de Cambios", validators=[Optional()])
+    # Step Autorizaciones
+    elaboro_nombre = StringField("Nombre", validators=[Optional(), Length(max=256)])
+    elaboro_puesto = StringField("Puesto", validators=[Optional(), Length(max=256)])
+    elaboro_email = SelectField(label="Correo electrónico", coerce=str, validators=[Optional()], validate_choice=False)
+    reviso_nombre = StringField("Nombre", validators=[Optional(), Length(max=256)])
+    reviso_puesto = StringField("Puesto", validators=[Optional(), Length(max=256)])
+    reviso_email = SelectField(label="Correo electrónico", coerce=str, validators=[Optional()], validate_choice=False)
+    aprobo_nombre = StringField("Nombre", validators=[Optional(), Length(max=256)])
+    aprobo_puesto = StringField("Puesto", validators=[Optional(), Length(max=256)])
+    aprobo_email = SelectField(label="Correo electrónico", coerce=str, validators=[Optional()], validate_choice=False)
+    autorizaciones = JSONField("Autorizaciones", validators=[Optional()])
+
+    def validate(self, extra_validators=None):
+        rv = super().validate(extra_validators)
+        if not rv:
+            return False
+
+        # Asegurar que la revisión siempre tenga un valor por defecto
+        if self.revision.data is None:
+            self.revision.data = 1
+
+        return True
+
     # Guardar
     guardar = SubmitField("Guardar")
 
@@ -112,3 +165,20 @@ class CIDProcedimientoSearchForm(FlaskForm):
     fecha_desde = DateField("Fecha desde", validators=[Optional()])
     fecha_hasta = DateField("Fecha hasta", validators=[Optional()])
     buscar = SubmitField("Buscar")
+
+
+class CIDProcedimientosNewReview(FlaskForm):
+    """Formulario nueva revision"""
+
+    titulo_procedimiento = StringField("Título Procedimiento", validators=[Optional()])
+    codigo = StringField("Código")  # Solo lectura
+    revision = IntegerField("Nueva Revisión")  # Solo lectura
+    cid_area = StringField("Área")  # Read Only
+    fecha = DateField("Fecha de elaboración", validators=[DataRequired()])
+    reviso_nombre = StringField("Nombre", validators=[Optional(), Length(max=256)])
+    reviso_puesto = StringField("Puesto", validators=[Optional(), Length(max=256)])
+    reviso_email = SelectField(label="Correo electrónico", coerce=str, validators=[Optional()], validate_choice=False)
+    aprobo_nombre = StringField("Nombre", validators=[Optional(), Length(max=256)])
+    aprobo_puesto = StringField("Puesto", validators=[Optional(), Length(max=256)])
+    aprobo_email = SelectField(label="Correo electrónico", coerce=str, validators=[Optional()], validate_choice=False)
+    guardar = SubmitField("Iniciar nueva revisión")
