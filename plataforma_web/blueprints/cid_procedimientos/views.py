@@ -223,7 +223,7 @@ def list_active():
         return render_template(
             "cid_procedimientos/list_admin.jinja2",
             titulo="Procedimientos autorizados de mis áreas",
-            filtros=json.dumps({"estatus": "A", "seguimiento": "AUTORIZADO", "cid_areas": cid_areas_ids}),
+            filtros=json.dumps({"estatus": "A", "seguimiento": "AUTORIZADO", "seguimiento_posterior": "ARCHIVADO", "cid_areas": cid_areas_ids}),
             estatus="A",
             show_button_list_owned=current_user_roles.intersection(ROLES_CON_PROCEDIMIENTOS_PROPIOS),
             show_button_list_all=ROL_COORDINADOR in current_user_roles,
